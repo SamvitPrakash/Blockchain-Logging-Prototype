@@ -1,0 +1,3 @@
+[submodule "docker_open5gs"]
+	path = docker_open5gs
+	url = git@github.com:herlesupreeth/docker_open5gs.git
