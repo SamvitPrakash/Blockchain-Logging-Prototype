@@ -1,0 +1,27 @@
+services:
+  ue:
+    image: docker_ueransim
+    container_name: ${UE_CONTAINER}
+    stdin_open: true
+    tty: true
+    volumes:
+      - ${UE_CONFIG_DIR}:/mnt/ueransim
+      - ./docker_open5gs/ueransim/ueransim-ue_init.sh:/mnt/ueransim/ueransim-ue_init.sh:ro
+      - /etc/localtime:/etc/localtime:ro
+    env_file:
+      - ${ENV_FILE}
+    environment:
+      - COMPONENT_NAME=ueransim-ue
+    expose:
+      - "4997/udp"
+    cap_add:
+      - NET_ADMIN
+    privileged: true
+    networks:
+      default:
+        ipv4_address: ${UE_IP}
+
+networks:
+  default:
+    external: true
+    name: docker_open5gs_default
