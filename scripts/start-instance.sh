@@ -27,13 +27,28 @@ fi
 echo "=============================================="
 echo " Starting instance ${INSTANCE}"
 echo "=============================================="
+echo
+
+echo "Creating OAM network..."
+
+"$PROJECT_ROOT/scripts/networks/OAM/create-oam-network.sh" "$INSTANCE"
 
 echo
+
 echo "Starting gNB..."
+
 docker compose -f "${GNB_DIR}/compose.yaml" up -d
 
 echo
+
+echo "Connecting gNB to OAM..."
+
+"$PROJECT_ROOT/scripts/networks/OAM/connect-oam.sh" "$INSTANCE"
+
+echo
+
 echo "Starting UE..."
+
 docker compose -f "${UE_DIR}/compose.yaml" up -d
 
 echo
