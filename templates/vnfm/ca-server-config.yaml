@@ -1,0 +1,64 @@
+version: 1.5.0
+
+port: 7054
+
+debug: false
+
+crlsizelimit: 512000
+
+tls:
+  enabled: false
+
+ca:
+  name: ca
+
+registry:
+  maxenrollments: -1
+
+db:
+  type: sqlite3
+  datasource: fabric-ca-server.db
+  tls:
+    enabled: false
+
+affiliations:
+  org1:
+    - peer
+    - orderer
+
+csr:
+  cn: ca
+  keyrequest:
+    algo: ecdsa
+    size: 256
+  names:
+    - C: ZA
+      ST: Gauteng
+      L: Johannesburg
+      O: Blockchain Logging Prototype
+
+signing:
+  default:
+    expiry: 8760h
+    usage:
+      - digital signature
+  profiles:
+    ca:
+      caconstraint:
+        isca: true
+        maxpathlen: 0
+      expiry: 43800h
+      usage:
+        - cert sign
+        - crl sign
+    tls:
+      expiry: 8760h
+      usage:
+        - signing
+        - key encipherment
+        - server auth
+        - client auth
+        - key agreement
+
+metrics:
+  provider: disabled
