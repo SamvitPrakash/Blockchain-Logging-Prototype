@@ -1,3 +1,6 @@
 [submodule "docker_open5gs"]
 	path = docker_open5gs
 	url = git@github.com:herlesupreeth/docker_open5gs.git
+[submodule "fabric-samples"]
+	path = fabric-samples
+	url = git@github.com:hyperledger/fabric-samples.git
