@@ -1,12 +1,66 @@
 services:
   ${VNF_CONTAINER}:
-    image: test-vnf:latest
+    image: hyperledger/fabric-peer:2.5
     container_name: ${VNF_CONTAINER}
 
     environment:
-      VNF_IP: "${VNF_XIT_IP}"
-      VNF_PORT: "${VNF_PORT}"
-      VNF_PEERS: "${VNF_PEERS}"
+      # ------------------------------------------------------
+      # Peer identity
+      # ------------------------------------------------------
+
+      CORE_PEER_ID: ${PEER_NAME}
+      CORE_PEER_LOCALMSPID: Org1MSP
+
+      CORE_PEER_MSPCONFIGPATH: /etc/hyperledger/fabric/msp
+
+
+      # ------------------------------------------------------
+      # Peer networking
+      # ------------------------------------------------------
+
+      CORE_PEER_ADDRESS: ${VNF_XIT_IP}:7051
+      CORE_PEER_LISTENADDRESS: 0.0.0.0:7051
+
+      CORE_PEER_CHAINCODEADDRESS: ${VNF_XIT_IP}:7052
+      CORE_PEER_CHAINCODELISTENADDRESS: 0.0.0.0:7052
+
+
+      # ------------------------------------------------------
+      # Gossip
+      # ------------------------------------------------------
+
+      CORE_PEER_GOSSIP_EXTERNALENDPOINT: ${VNF_XIT_IP}:7051
+
+
+      # ------------------------------------------------------
+      # TLS
+      # ------------------------------------------------------
+
+      CORE_PEER_TLS_ENABLED: "true"
+
+      CORE_PEER_TLS_CERT_FILE: /etc/hyperledger/fabric/tls/signcerts/cert.pem
+
+      CORE_PEER_TLS_KEY_FILE: /etc/hyperledger/fabric/tls/keystore/${TLS_KEY_NAME}
+
+      CORE_PEER_TLS_ROOTCERT_FILE: /etc/hyperledger/fabric/tls/tlscacerts/tls-fabric-ca-7054.pem
+
+
+      # ------------------------------------------------------
+      # Fabric configuration
+      # ------------------------------------------------------
+
+      FABRIC_CFG_PATH: /etc/hyperledger/fabric
+
+
+    # --------------------------------------------------------
+    # Peer identity
+    # --------------------------------------------------------
+
+    volumes:
+      - ${IDENTITY_DIR}/msp:/etc/hyperledger/fabric/msp
+      - ${IDENTITY_DIR}/tls:/etc/hyperledger/fabric/tls
+      - ${CHANNEL_TX}:/etc/hyperledger/fabric/xit-channel.tx:ro
+      - ${ORG_ADMIN_MSP}:/etc/hyperledger/fabric/org-admin-msp:ro
 
     networks:
       oam:
@@ -15,11 +69,17 @@ services:
       xit:
         ipv4_address: ${VNF_XIT_IP}
 
+
+# ============================================================
+# Networks
+# ============================================================
+
 networks:
+
   oam:
     external: true
     name: ${OAM_NETWORK}
 
   xit:
     external: true
-    name: XIT
+    name: ${XIT_NETWORK}
