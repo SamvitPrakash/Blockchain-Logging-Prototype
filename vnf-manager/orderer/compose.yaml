@@ -1,0 +1,37 @@
+services:
+  orderer0:
+    image: hyperledger/fabric-orderer:2.5.16
+    container_name: orderer0
+
+    environment:
+      ORDERER_GENERAL_LISTENADDRESS: 0.0.0.0
+      ORDERER_GENERAL_LISTENPORT: 7050
+
+      ORDERER_GENERAL_LOCALMSPID: Org1MSP
+      ORDERER_GENERAL_LOCALMSPDIR: /var/hyperledger/orderer/msp
+
+      ORDERER_GENERAL_GENESISMETHOD: file
+      ORDERER_GENERAL_GENESISFILE: /var/hyperledger/orderer/genesis/genesis.block
+
+      ORDERER_GENERAL_TLS_ENABLED: true
+      ORDERER_GENERAL_TLS_PRIVATEKEY: /var/hyperledger/orderer/tls/keystore/6f3b2251bb97bbe22d2e2f5a06e2bc022b3f5346b3f09dd9731c5967e99d2131_sk
+      ORDERER_GENERAL_TLS_CERTIFICATE: /var/hyperledger/orderer/tls/signcerts/cert.pem
+      ORDERER_GENERAL_TLS_ROOTCAS: '[/var/hyperledger/orderer/tls/tlscacerts/tls-fabric-ca-7054.pem]'
+
+    volumes:
+      - ../identities/orderer0/msp:/var/hyperledger/orderer/msp
+      - ../identities/orderer0/tls:/var/hyperledger/orderer/tls
+      - ./genesis/genesis.block:/var/hyperledger/orderer/genesis/genesis.block
+
+    ports:
+      - "7050:7050"
+
+    networks:
+      xit:
+        aliases:
+          - orderer0
+
+networks:
+  xit:
+    external: true
+    name: XIT
