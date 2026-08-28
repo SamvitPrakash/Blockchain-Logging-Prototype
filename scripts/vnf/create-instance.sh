@@ -43,6 +43,21 @@ XIT_NETWORK="XIT"
 VNF_XIT_IP="10.10.0.$((50 + INSTANCE))"
 PEER_IP="10.10.0.$((100 + INSTANCE))"
 
+# ============================================================
+# Host ownership
+# ============================================================
+
+HOST_UID="$(id -u)"
+HOST_GID="$(id -g)"
+
+# ============================================================
+# Peer configuration
+# ============================================================
+
+PEER_SECRET="peerpw"
+PEER_HOSTNAME="${PEER_NAME}"
+PEER_STATE_DIR="/opt/vnf-state/peer"
+
 CA_IP="10.10.0.11"
 
 # ============================================================
@@ -56,26 +71,22 @@ if [ ! -f "$TEMPLATE_DIR/Dockerfile" ]; then
 fi
 
 if [ ! -f "$TEMPLATE_DIR/entrypoint.sh" ]; then
-    echo "Error: VNF entrypoint not found:"
-    echo "  $TEMPLATE_DIR/entrypoint.sh"
-    exit 1
-fi
-
-if [ ! -f "$TEMPLATE_DIR/start-peer.sh" ]; then
-    echo "Error: nested peer script not found:"
-    echo "  $TEMPLATE_DIR/start-peer.sh"
+    echo "Error: VNF entrypoint not found."
     exit 1
 fi
 
 if [ ! -f "$TEMPLATE_DIR/register-peer.sh" ]; then
-    echo "Error: peer registration script not found:"
-    echo "  $TEMPLATE_DIR/register-peer.sh"
+    echo "Error: register-peer.sh not found."
     exit 1
 fi
 
 if [ ! -f "$TEMPLATE_DIR/enroll-peer.sh" ]; then
-    echo "Error: peer enrollment script not found:"
-    echo "  $TEMPLATE_DIR/enroll-peer.sh"
+    echo "Error: enroll-peer.sh not found."
+    exit 1
+fi
+
+if [ ! -f "$TEMPLATE_DIR/start-peer.sh" ]; then
+    echo "Error: start-peer.sh not found."
     exit 1
 fi
 
@@ -84,10 +95,9 @@ if docker inspect "$VNF_CONTAINER" >/dev/null 2>&1; then
     exit 1
 fi
 
-if docker network inspect "$OAM_NETWORK" >/dev/null 2>&1; then
-    :
-else
+if ! docker network inspect "$OAM_NETWORK" >/dev/null 2>&1; then
     echo "Error: OAM network '${OAM_NETWORK}' does not exist."
+    echo
     echo "Create it first with:"
     echo
     echo "  ./scripts/networks/OAM/create-oam-network.sh ${INSTANCE}"
@@ -97,6 +107,7 @@ fi
 
 if ! docker network inspect "$XIT_NETWORK" >/dev/null 2>&1; then
     echo "Error: XIT network does not exist."
+    echo
     echo "Create it first with:"
     echo
     echo "  ./scripts/networks/XIT/setup-XIT.sh"
@@ -107,6 +118,11 @@ fi
 if [ -d "$BUILD_DIR" ]; then
     echo "Error: build directory already exists:"
     echo "  $BUILD_DIR"
+    echo
+    echo "Remove it first if you want to regenerate the instance:"
+    echo
+    echo "  rm -rf ${BUILD_DIR}"
+    echo
     exit 1
 fi
 
@@ -115,12 +131,6 @@ fi
 # ============================================================
 
 mkdir -p "$BUILD_DIR"
-
-# ============================================================
-# Create persistent peer state directory
-# ============================================================
-
-mkdir -p "$BUILD_DIR/peer"
 
 # ============================================================
 # Build VNF image
@@ -136,7 +146,7 @@ docker build \
 # Generate Compose
 # ============================================================
 
-cat > "$BUILD_DIR/compose.yaml" <<COMPOSE
+cat > "$BUILD_DIR/compose.yaml" <<EOF
 services:
   ${VNF_CONTAINER}:
     image: ${IMAGE_NAME}
@@ -147,23 +157,24 @@ services:
 
     environment:
       VNF_INSTANCE: "${INSTANCE}"
+      VNF_STATE_DIR: "/opt/vnf-state"
       VNF_NAME: "${VNF_NAME}"
-      VNF_STATE_DIR: /opt/vnf-state
 
       OAM_NETWORK: "${OAM_NETWORK}"
       OAM_IP: "${OAM_IP}"
 
       XIT_NETWORK: "${XIT_NETWORK}"
-      VNF_XIT_IP: "${VNF_XIT_IP}"
-
-      PEER_NAME: "${PEER_NAME}"
-      PEER_HOSTNAME: "${PEER_NAME}"
       PEER_IP: "${PEER_IP}"
 
-      CA_NAME: "ca"
-      CA_IP: "${CA_IP}"
+      HOST_UID: "${HOST_UID}"
+      HOST_GID: "${HOST_GID}"
 
-      PEER_SECRET: "peer${INSTANCE}pw"
+      PEER_NAME: "${PEER_NAME}"
+      PEER_SECRET: "${PEER_SECRET}"
+      PEER_HOSTNAME: "${PEER_HOSTNAME}"
+      PEER_STATE_DIR: "${PEER_STATE_DIR}"
+
+      CA_IP: "${CA_IP}"
 
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -184,109 +195,74 @@ networks:
   xit:
     external: true
     name: ${XIT_NETWORK}
-COMPOSE
+EOF
 
 # ============================================================
-# Host-side peer wrapper
+# Generate host-side helper scripts
 # ============================================================
 
-cat > "$BUILD_DIR/start-peer.sh" <<STARTPEER
+cat > "$BUILD_DIR/register-peer.sh" <<EOF
 #!/bin/bash
 
 set -e
 
-VNF_CONTAINER="${VNF_CONTAINER}"
-
-echo "=============================================="
-echo " Starting nested Fabric peer"
-echo "=============================================="
-echo
-echo "VNF          : ${VNF_NAME}"
-echo "Peer         : ${PEER_NAME}"
-echo "Peer IP      : ${PEER_IP}"
-echo "XIT          : ${XIT_NETWORK}"
-echo
-
-if ! docker inspect \
-    --format '{{.State.Running}}' \
-    "${VNF_CONTAINER}" 2>/dev/null | grep -q '^true$'; then
-
-    echo "Error: VNF container '${VNF_CONTAINER}' is not running."
-    echo
-    echo "Start it with:"
-    echo
-    echo "  docker compose -f build/vnf-${INSTANCE}/compose.yaml up -d"
-    exit 1
-fi
-
-exec docker exec \
-    "${VNF_CONTAINER}" \
-    /opt/vnf/start-peer.sh
-STARTPEER
-
-chmod +x "$BUILD_DIR/start-peer.sh"
-
-# ============================================================
-# Host-side peer registration wrapper
-# ============================================================
-
-cat > "$BUILD_DIR/register-peer.sh" <<REGISTERPEER
-#!/bin/bash
-
-set -e
-
-VNF_CONTAINER="${VNF_CONTAINER}"
-
-echo "=============================================="
-echo " Registering nested Fabric peer"
-echo "=============================================="
-echo
-
-if ! docker inspect \
-    --format '{{.State.Running}}' \
-    "${VNF_CONTAINER}" 2>/dev/null | grep -q '^true$'; then
-
-    echo "Error: VNF container '${VNF_CONTAINER}' is not running."
-    exit 1
-fi
-
-exec docker exec \
-    "${VNF_CONTAINER}" \
+docker exec \\
+    -e VNF_INSTANCE="${INSTANCE}" \\
+    -e VNF_NAME="${VNF_NAME}" \\
+    -e VNF_STATE_DIR="/opt/vnf-state" \\
+    -e PEER_NAME="${PEER_NAME}" \\
+    -e PEER_SECRET="${PEER_SECRET}" \\
+    -e PEER_HOSTNAME="${PEER_HOSTNAME}" \\
+    -e PEER_IP="${PEER_IP}" \\
+    -e PEER_STATE_DIR="${PEER_STATE_DIR}" \\
+    -e CA_IP="${CA_IP}" \\
+    "${VNF_CONTAINER}" \\
     /opt/vnf/register-peer.sh
-REGISTERPEER
+EOF
 
-chmod +x "$BUILD_DIR/register-peer.sh"
-
-# ============================================================
-# Host-side peer enrollment wrapper
-# ============================================================
-
-cat > "$BUILD_DIR/enroll-peer.sh" <<ENROLLPEER
+cat > "$BUILD_DIR/enroll-peer.sh" <<EOF
 #!/bin/bash
 
 set -e
 
-VNF_CONTAINER="${VNF_CONTAINER}"
-
-echo "=============================================="
-echo " Enrolling nested Fabric peer"
-echo "=============================================="
-echo
-
-if ! docker inspect \
-    --format '{{.State.Running}}' \
-    "${VNF_CONTAINER}" 2>/dev/null | grep -q '^true$'; then
-
-    echo "Error: VNF container '${VNF_CONTAINER}' is not running."
-    exit 1
-fi
-
-exec docker exec \
-    "${VNF_CONTAINER}" \
+docker exec \\
+    -e VNF_INSTANCE="${INSTANCE}" \\
+    -e VNF_NAME="${VNF_NAME}" \\
+    -e VNF_STATE_DIR="/opt/vnf-state" \\
+    -e PEER_NAME="${PEER_NAME}" \\
+    -e PEER_SECRET="${PEER_SECRET}" \\
+    -e PEER_HOSTNAME="${PEER_HOSTNAME}" \\
+    -e PEER_IP="${PEER_IP}" \\
+    -e PEER_STATE_DIR="${PEER_STATE_DIR}" \\
+    -e CA_IP="${CA_IP}" \\
+    -e HOST_UID="${HOST_UID}" \\
+    -e HOST_GID="${HOST_GID}" \\
+    "${VNF_CONTAINER}" \\
     /opt/vnf/enroll-peer.sh
-ENROLLPEER
+EOF
 
-chmod +x "$BUILD_DIR/enroll-peer.sh"
+cat > "$BUILD_DIR/start-peer.sh" <<EOF
+#!/bin/bash
+
+set -e
+
+docker exec \\
+    -e VNF_INSTANCE="${INSTANCE}" \\
+    -e VNF_NAME="${VNF_NAME}" \\
+    -e VNF_STATE_DIR="/opt/vnf-state" \\
+    -e PEER_NAME="${PEER_NAME}" \\
+    -e PEER_HOSTNAME="${PEER_HOSTNAME}" \\
+    -e PEER_IP="${PEER_IP}" \\
+    -e PEER_STATE_DIR="${PEER_STATE_DIR}" \\
+    -e XIT_NETWORK="${XIT_NETWORK}" \\
+    "${VNF_CONTAINER}" \\
+    /opt/vnf/start-peer.sh
+EOF
+
+chmod +x \
+    "$BUILD_DIR/register-peer.sh" \
+    "$BUILD_DIR/enroll-peer.sh" \
+    "$BUILD_DIR/start-peer.sh"
 
 # ============================================================
 # Finished
@@ -306,7 +282,12 @@ echo "  XIT IP     : ${VNF_XIT_IP}"
 echo
 echo "Nested peer:"
 echo "  Name       : ${PEER_NAME}"
+echo "  Hostname   : ${PEER_HOSTNAME}"
 echo "  XIT IP     : ${PEER_IP}"
+echo
+echo "Host:"
+echo "  UID        : ${HOST_UID}"
+echo "  GID        : ${HOST_GID}"
 echo
 echo "Generated:"
 echo "  ${BUILD_DIR}/compose.yaml"
@@ -314,22 +295,13 @@ echo "  ${BUILD_DIR}/register-peer.sh"
 echo "  ${BUILD_DIR}/enroll-peer.sh"
 echo "  ${BUILD_DIR}/start-peer.sh"
 echo
-echo "Peer state:"
-echo "  ${BUILD_DIR}/peer/"
-echo
 echo "Start VNF with:"
 echo
 echo "  docker compose -f ${BUILD_DIR}/compose.yaml up -d"
 echo
-echo "Register peer with:"
+echo "Then:"
 echo
 echo "  ${BUILD_DIR}/register-peer.sh"
-echo
-echo "Enroll peer with:"
-echo
 echo "  ${BUILD_DIR}/enroll-peer.sh"
-echo
-echo "Start nested peer with:"
-echo
 echo "  ${BUILD_DIR}/start-peer.sh"
 echo

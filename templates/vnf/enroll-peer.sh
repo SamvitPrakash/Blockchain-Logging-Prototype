@@ -1,13 +1,21 @@
-#!/bin/bash
+#!/bin/sh
 
-set -e
+set -eu
 
-: "${PEER_NAME:?PEER_NAME is required}"
-: "${PEER_SECRET:?PEER_SECRET is required}"
-: "${CA_IP:?CA_IP is required}"
-: "${PEER_IP:?PEER_IP is required}"
-: "${PEER_HOSTNAME:?PEER_HOSTNAME is required}"
-: "${PEER_STATE_DIR:?PEER_STATE_DIR is required}"
+# ============================================================
+# VNF nested Fabric peer enrollment
+# ============================================================
+
+: "${VNF_INSTANCE:?VNF_INSTANCE is required}"
+: "${VNF_STATE_DIR:?VNF_STATE_DIR is required}"
+
+PEER_NAME="${PEER_NAME:-fabric-peer-${VNF_INSTANCE}}"
+PEER_SECRET="${PEER_SECRET:-peerpw}"
+CA_IP="${CA_IP:-10.10.0.11}"
+PEER_IP="${PEER_IP:-10.10.0.$((100 + VNF_INSTANCE))}"
+PEER_HOSTNAME="${PEER_HOSTNAME:-${PEER_NAME}}"
+
+PEER_STATE_DIR="${PEER_STATE_DIR:-${VNF_STATE_DIR}/peer}"
 
 CA_URL="http://${CA_IP}:7054"
 
@@ -23,7 +31,10 @@ echo "Peer       : ${PEER_NAME}"
 echo "Hostname   : ${PEER_HOSTNAME}"
 echo "IP         : ${PEER_IP}"
 echo "CA         : ${CA_URL}"
+echo "State      : ${PEER_STATE_DIR}"
 echo
+
+mkdir -p "${PEER_STATE_DIR}"
 
 rm -rf "${CLIENT_HOME}"
 rm -rf "${MSP_DIR}"
@@ -35,7 +46,7 @@ mkdir -p \
     "${TLS_DIR}"
 
 # ------------------------------------------------------------
-# Enroll peer MSP identity
+# Enroll peer MSP
 # ------------------------------------------------------------
 
 echo "Enrolling peer MSP..."
@@ -47,7 +58,7 @@ fabric-ca-client enroll \
     --csr.cn "${PEER_HOSTNAME}"
 
 # ------------------------------------------------------------
-# Enroll peer TLS identity
+# Enroll peer TLS
 # ------------------------------------------------------------
 
 echo "Enrolling peer TLS identity..."
@@ -61,27 +72,27 @@ fabric-ca-client enroll \
     --csr.hosts "${PEER_HOSTNAME},${PEER_IP}"
 
 # ------------------------------------------------------------
-# Convert TLS enrollment into Fabric peer TLS layout
+# Fabric TLS layout
 # ------------------------------------------------------------
 
 TLS_CERT="$(find "${TLS_DIR}/signcerts" -type f -name '*.pem' -print -quit)"
 TLS_KEY="$(find "${TLS_DIR}/keystore" -type f -name '*_sk' -print -quit)"
 TLS_CA="$(find "${TLS_DIR}/tlscacerts" -type f -name '*.pem' -print -quit)"
 
-if [ -z "${TLS_CERT}" ]; then
+[ -n "${TLS_CERT}" ] || {
     echo "Error: TLS certificate was not generated."
     exit 1
-fi
+}
 
-if [ -z "${TLS_KEY}" ]; then
+[ -n "${TLS_KEY}" ] || {
     echo "Error: TLS private key was not generated."
     exit 1
-fi
+}
 
-if [ -z "${TLS_CA}" ]; then
+[ -n "${TLS_CA}" ] || {
     echo "Error: TLS CA certificate was not generated."
     exit 1
-fi
+}
 
 cp "${TLS_CERT}" "${TLS_DIR}/server.crt"
 cp "${TLS_KEY}"  "${TLS_DIR}/server.key"
@@ -91,46 +102,62 @@ cp "${TLS_CA}"   "${TLS_DIR}/ca.crt"
 # MSP Node OU configuration
 # ------------------------------------------------------------
 
-cat > "${MSP_DIR}/config.yaml" <<'MSPCONFIG'
+CA_CERT="$(find "${MSP_DIR}/cacerts" -type f -name '*.pem' -print -quit)"
+
+[ -n "${CA_CERT}" ] || {
+    echo "Error: MSP CA certificate was not generated."
+    exit 1
+}
+
+cat > "${MSP_DIR}/config.yaml" <<EOF
 NodeOUs:
   Enable: true
 
   ClientOUIdentifier:
-    Certificate: cacerts/ca-cert.pem
+    Certificate: cacerts/$(basename "${CA_CERT}")
     OrganizationalUnitIdentifier: client
 
   PeerOUIdentifier:
-    Certificate: cacerts/ca-cert.pem
+    Certificate: cacerts/$(basename "${CA_CERT}")
     OrganizationalUnitIdentifier: peer
 
   AdminOUIdentifier:
-    Certificate: cacerts/ca-cert.pem
+    Certificate: cacerts/$(basename "${CA_CERT}")
     OrganizationalUnitIdentifier: admin
 
   OrdererOUIdentifier:
-    Certificate: cacerts/ca-cert.pem
+    Certificate: cacerts/$(basename "${CA_CERT}")
     OrganizationalUnitIdentifier: orderer
-MSPCONFIG
+EOF
 
 # ------------------------------------------------------------
-# Locate CA certificate
+# Ownership
+#
+# The VNF container runs as root, but the generated state is
+# intended to be consumed from the host. HOST_UID/HOST_GID are
+# supplied by compose.yaml.
 # ------------------------------------------------------------
 
-CA_CERT="$(find "${MSP_DIR}/cacerts" -type f -name '*.pem' -print -quit)"
+HOST_UID="${HOST_UID:-1000}"
+HOST_GID="${HOST_GID:-1000}"
 
-if [ -z "${CA_CERT}" ]; then
-    echo "Error: CA certificate was not generated."
-    exit 1
-fi
+chown -R "${HOST_UID}:${HOST_GID}" "${PEER_STATE_DIR}"
 
 echo
 echo "=============================================="
 echo " Peer identity generated"
 echo "=============================================="
 echo
+echo "Peer state:"
+echo "  ${PEER_STATE_DIR}"
+echo
 echo "MSP:"
 find "${MSP_DIR}" -type f -print | sort
 echo
 echo "TLS:"
 find "${TLS_DIR}" -type f -print | sort
+echo
+echo "=============================================="
+echo " Enrollment complete"
+echo "=============================================="
 echo

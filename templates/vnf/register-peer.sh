@@ -1,52 +1,81 @@
-#!/bin/bash
+#!/bin/sh
 
-set -e
+set -eu
 
-: "${PEER_NAME:?PEER_NAME is required}"
-: "${PEER_SECRET:?PEER_SECRET is required}"
-: "${CA_IP:?CA_IP is required}"
-: "${XIT_NETWORK:?XIT_NETWORK is required}"
+# ============================================================
+# VNF nested Fabric peer registration
+# ============================================================
 
-CA_CONTAINER="fabric-ca"
-CLIENT_IMAGE="hyperledger/fabric-ca:1.5.17"
-CLIENT_HOME="/tmp/fabric-ca-client-${PEER_NAME}"
+: "${VNF_INSTANCE:?VNF_INSTANCE is required}"
+: "${VNF_STATE_DIR:?VNF_STATE_DIR is required}"
+
+PEER_NAME="${PEER_NAME:-fabric-peer-${VNF_INSTANCE}}"
+PEER_SECRET="${PEER_SECRET:-peerpw}"
+CA_IP="${CA_IP:-10.10.0.11}"
+PEER_IP="${PEER_IP:-10.10.0.$((100 + VNF_INSTANCE))}"
+PEER_HOSTNAME="${PEER_HOSTNAME:-${PEER_NAME}}"
+PEER_STATE_DIR="${PEER_STATE_DIR:-${VNF_STATE_DIR}/peer}"
+
+CA_URL="http://${CA_IP}:7054"
+CLIENT_HOME="${PEER_STATE_DIR}/client"
 
 echo "=============================================="
 echo " Registering Fabric peer"
 echo "=============================================="
 echo
 echo "Peer       : ${PEER_NAME}"
-echo "CA         : ${CA_CONTAINER}"
-echo "CA IP      : ${CA_IP}"
-echo "XIT        : ${XIT_NETWORK}"
+echo "Hostname   : ${PEER_HOSTNAME}"
+echo "IP         : ${PEER_IP}"
+echo "CA         : ${CA_URL}"
+echo "State      : ${PEER_STATE_DIR}"
 echo
 
-docker run --rm \
-    --network "${XIT_NETWORK}" \
-    --name "fabric-ca-client-${PEER_NAME}" \
-    -e FABRIC_CA_CLIENT_HOME="${CLIENT_HOME}" \
-    "${CLIENT_IMAGE}" \
-    sh -c "
-        set -e
+mkdir -p "${PEER_STATE_DIR}" "${CLIENT_HOME}"
 
-        mkdir -p '${CLIENT_HOME}'
+# ------------------------------------------------------------
+# Enroll CA administrator
+#
+# The CA server is initialized with the admin identity.
+# These credentials must match the CA server configuration.
+# ------------------------------------------------------------
 
-        echo 'Enrolling CA administrator...'
+CA_ADMIN="${CA_ADMIN:-admin}"
+CA_ADMIN_SECRET="${CA_ADMIN_SECRET:-adminpw}"
 
-        fabric-ca-client enroll \
-            -u http://admin:adminpw@${CA_IP}:7054 \
-            --home '${CLIENT_HOME}'
+echo "Enrolling CA administrator..."
 
-        echo 'Registering peer...'
+rm -rf "${CLIENT_HOME}/ca-admin"
 
-        fabric-ca-client register \
-            --home '${CLIENT_HOME}' \
-            --id.name '${PEER_NAME}' \
-            --id.secret '${PEER_SECRET}' \
-            --id.type peer \
-            --id.affiliation 'org1.peer' \
-            -u http://${CA_IP}:7054
-    "
+fabric-ca-client enroll \
+    -u "http://${CA_ADMIN}:${CA_ADMIN_SECRET}@${CA_IP}:7054" \
+    --home "${CLIENT_HOME}/ca-admin"
+
+# ------------------------------------------------------------
+# Register peer identity
+# ------------------------------------------------------------
+
+echo "Registering peer..."
+
+export FABRIC_CA_CLIENT_HOME="${CLIENT_HOME}/ca-admin"
+
+fabric-ca-client register \
+    --id.name "${PEER_NAME}" \
+    --id.secret "${PEER_SECRET}" \
+    --id.type peer \
+    --id.affiliation "org1.peer" \
+    -u "${CA_URL}"
 
 echo
-echo "Peer '${PEER_NAME}' registered successfully."
+echo "=============================================="
+echo " Peer registered successfully"
+echo "=============================================="
+echo
+echo "Peer:"
+echo "  Name       : ${PEER_NAME}"
+echo "  Secret     : ${PEER_SECRET}"
+echo "  Affiliation: org1.peer"
+echo
+echo "Next:"
+echo
+echo "  ./build/vnf-${VNF_INSTANCE}/enroll-peer.sh"
+echo
