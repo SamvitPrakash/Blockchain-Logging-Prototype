@@ -1,0 +1,25 @@
+services:
+  ${VNF_CONTAINER}:
+    image: test-vnf:latest
+    container_name: ${VNF_CONTAINER}
+
+    environment:
+      VNF_IP: "${VNF_XIT_IP}"
+      VNF_PORT: "${VNF_PORT}"
+      VNF_PEERS: "${VNF_PEERS}"
+
+    networks:
+      oam:
+        ipv4_address: ${VNF_OAM_IP}
+
+      xit:
+        ipv4_address: ${VNF_XIT_IP}
+
+networks:
+  oam:
+    external: true
+    name: ${OAM_NETWORK}
+
+  xit:
+    external: true
+    name: XIT

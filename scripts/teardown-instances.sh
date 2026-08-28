@@ -27,10 +27,12 @@ echo "=============================================="
 echo " Stopping VNF instances"
 echo "=============================================="
 
-for container in $(docker ps --format '{{.Names}}' | grep '^vnf_[0-9]\+$' || true); do
-    echo "Stopping ${container}..."
-    docker stop "$container"
-    docker rm "$container"
+for compose_file in build/vnf-*/compose.yaml; do
+    [ -e "$compose_file" ] || continue
+
+    echo
+    echo "Stopping $(dirname "$compose_file")..."
+    docker compose -f "$compose_file" down
 done
 
 echo
