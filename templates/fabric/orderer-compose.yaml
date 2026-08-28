@@ -14,18 +14,18 @@ services:
       ORDERER_GENERAL_GENESISFILE: /var/hyperledger/orderer/genesis/genesis.block
 
       ORDERER_GENERAL_TLS_ENABLED: true
-      ORDERER_GENERAL_TLS_PRIVATEKEY: /var/hyperledger/orderer/tls/keystore/b8b01a0090848c28c1bde06657a12ed7f4fe0f59a3bb46c7f0d2747125e114f2_sk
+      ORDERER_GENERAL_TLS_PRIVATEKEY: /var/hyperledger/orderer/tls/keystore/${ORDERER_TLS_KEY}
       ORDERER_GENERAL_TLS_CERTIFICATE: /var/hyperledger/orderer/tls/signcerts/cert.pem
       ORDERER_GENERAL_TLS_ROOTCAS: '[/var/hyperledger/orderer/tls/tlscacerts/tls-fabric-ca-7054.pem]'
 
       ORDERER_GENERAL_CLUSTER_CLIENTCERTIFICATE: /var/hyperledger/orderer/tls/signcerts/cert.pem
-      ORDERER_GENERAL_CLUSTER_CLIENTPRIVATEKEY: /var/hyperledger/orderer/tls/keystore/b8b01a0090848c28c1bde06657a12ed7f4fe0f59a3bb46c7f0d2747125e114f2_sk
+      ORDERER_GENERAL_CLUSTER_CLIENTPRIVATEKEY: /var/hyperledger/orderer/tls/keystore/${ORDERER_TLS_KEY}
       ORDERER_GENERAL_CLUSTER_ROOTCAS: '[/var/hyperledger/orderer/tls/tlscacerts/tls-fabric-ca-7054.pem]'
 
     volumes:
-      - /home/_c3rberus/GitHub/Blockchain-Logging-Prototype/vnf-manager/identities/orderer0/msp:/var/hyperledger/orderer/msp
-      - /home/_c3rberus/GitHub/Blockchain-Logging-Prototype/vnf-manager/identities/orderer0/tls:/var/hyperledger/orderer/tls
-      - /home/_c3rberus/GitHub/Blockchain-Logging-Prototype/vnf-manager/orderer/genesis/genesis.block:/var/hyperledger/orderer/genesis/genesis.block
+      - ${IDENTITY_DIR}/msp:/var/hyperledger/orderer/msp
+      - ${IDENTITY_DIR}/tls:/var/hyperledger/orderer/tls
+      - ${GENESIS_BLOCK}:/var/hyperledger/orderer/genesis/genesis.block
 
     ports:
       - "7050:7050"
@@ -38,4 +38,4 @@ services:
 networks:
   xit:
     external: true
-    name: XIT
+    name: ${FABRIC_NETWORK}

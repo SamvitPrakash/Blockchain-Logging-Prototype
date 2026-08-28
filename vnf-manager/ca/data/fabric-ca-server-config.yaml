@@ -319,7 +319,7 @@ csr:
         O: Hyperledger
         OU: Fabric
    hosts:
-     - 94c0298ab1b8
+     - bc65c6b35804
      - localhost
    ca:
       expiry: 131400h
@@ -455,10 +455,7 @@ intermediate:
 cfg:
   identities:
     passwordattempts: 10
-  affiliations:
-    allowremove: false
-  identities:
-    allowremove: true
+
 ###############################################################################
 #
 #    Operations section

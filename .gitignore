@@ -1,2 +1,4 @@
 build/*
 vnf-manager/ca/data/msp/*
+vnf-manager/identities/
+vnf/peer/compose.yaml

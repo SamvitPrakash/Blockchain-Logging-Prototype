@@ -1,0 +1,41 @@
+services:
+  ${PEER_NAME}:
+    container_name: ${PEER_NAME}
+
+    image: hyperledger/fabric-peer:2.5
+
+    environment:
+      CORE_PEER_ID: ${PEER_NAME}
+      CORE_PEER_ADDRESS: ${PEER_NAME}:7051
+      CORE_PEER_LISTENADDRESS: 0.0.0.0:7051
+
+      CORE_PEER_CHAINCODEADDRESS: ${PEER_NAME}:7052
+      CORE_PEER_CHAINCODELISTENADDRESS: 0.0.0.0:7052
+
+      CORE_PEER_GOSSIP_BOOTSTRAP: ${PEER_NAME}:7051
+      CORE_PEER_GOSSIP_EXTERNALENDPOINT: ${PEER_NAME}:7051
+
+      CORE_PEER_LOCALMSPID: Org1MSP
+      CORE_PEER_MSPCONFIGPATH: /etc/hyperledger/fabric/msp
+
+      CORE_PEER_TLS_ENABLED: "true"
+      CORE_PEER_TLS_CERT_FILE: /etc/hyperledger/fabric/tls/signcerts/cert.pem
+      CORE_PEER_TLS_KEY_FILE: /etc/hyperledger/fabric/tls/keystore/${TLS_KEY}
+      CORE_PEER_TLS_ROOTCERT_FILE: /etc/hyperledger/fabric/tls/tlscacerts/tls-fabric-ca-7054.pem
+
+      FABRIC_CFG_PATH: /etc/hyperledger/fabric
+
+    volumes:
+      - ${IDENTITY_DIR}/msp:/etc/hyperledger/fabric/msp
+      - ${IDENTITY_DIR}/tls:/etc/hyperledger/fabric/tls
+
+    networks:
+      - ${FABRIC_NETWORK}
+
+    ports:
+      - "${PEER_PORT}:7051"
+      - "${CHAINCODE_PORT}:7052"
+
+networks:
+  ${FABRIC_NETWORK}:
+    external: true
