@@ -123,6 +123,33 @@ Channel: &ChannelDefaults
 
 Profiles:
 
+  XITChannel:
+
+    <<: *ChannelDefaults
+
+    Consortium: SampleConsortium
+
+    Application:
+
+      Organizations:
+        - *Org1
+
+      Policies:
+        Readers:
+          Type: ImplicitMeta
+          Rule: "ANY Readers"
+
+        Writers:
+          Type: ImplicitMeta
+          Rule: "ANY Writers"
+
+        Admins:
+          Type: ImplicitMeta
+          Rule: "MAJORITY Admins"
+
+      Capabilities:
+        <<: *ApplicationCapabilities
+
   XITGenesis:
 
     <<: *ChannelDefaults

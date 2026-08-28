@@ -1,0 +1,41 @@
+services:
+  peer0:
+    image: hyperledger/fabric-peer:2.5.16
+    container_name: peer0
+
+    environment:
+      FABRIC_CFG_PATH: /etc/hyperledger/fabric
+      CORE_PEER_ID: peer0
+      CORE_PEER_ADDRESS: peer0:7051
+      CORE_PEER_LISTENADDRESS: 0.0.0.0:7051
+
+      CORE_PEER_LOCALMSPID: Org1MSP
+      CORE_PEER_MSPCONFIGPATH: /etc/hyperledger/fabric/msp
+
+      CORE_PEER_TLS_ENABLED: "true"
+      CORE_PEER_TLS_CERT_FILE: /etc/hyperledger/fabric/tls/signcerts/cert.pem
+      CORE_PEER_TLS_KEY_FILE: /etc/hyperledger/fabric/tls/keystore/79fa5e7e48ba6fbbf3cca63e3bfc8a99a8a6e86bb9a1244c1f6e85a6e6338862_sk
+      CORE_PEER_TLS_ROOTCERT_FILE: /etc/hyperledger/fabric/tls/tlscacerts/tls-fabric-ca-7054.pem
+
+      CORE_PEER_GOSSIP_EXTERNALENDPOINT: peer0:7051
+      CORE_PEER_GOSSIP_BOOTSTRAP: peer0:7051
+
+      CORE_PEER_CHAINCODEADDRESS: peer0:7052
+      CORE_PEER_CHAINCODELISTENADDRESS: 0.0.0.0:7052
+
+    volumes:
+      - ../../vnf-manager/identities/peer0/msp:/etc/hyperledger/fabric/msp
+      - ../../vnf-manager/identities/peer0/tls:/etc/hyperledger/fabric/tls
+
+    ports:
+      - "7051:7051"
+
+    networks:
+      - xit
+
+    command: peer node start
+
+networks:
+  xit:
+    external: true
+    name: XIT
