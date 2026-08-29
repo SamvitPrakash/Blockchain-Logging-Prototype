@@ -12,19 +12,10 @@ set -euo pipefail
 PEER_IMAGE="hyperledger/fabric-peer:2.5"
 PEER_CONTAINER="${PEER_NAME}"
 
-# PEER_STATE_DIR:
-#   Path as seen from inside the VNF container.
-#
-# HOST_PEER_STATE_DIR:
-#   Path as seen by the host Docker daemon.
-#
-# The nested peer is created by the host Docker daemon because
-# the VNF has /var/run/docker.sock mounted into it.
-
-HOST_MSP_DIR="${HOST_PEER_STATE_DIR}/msp"
-HOST_TLS_DIR="${HOST_PEER_STATE_DIR}/tls"
-HOST_CORE_CONFIG="${HOST_PEER_STATE_DIR}/core.yaml"
-HOST_PRODUCTION_DIR="${HOST_PEER_STATE_DIR}/production"
+MSP_DIR="${PEER_STATE_DIR}/msp"
+TLS_DIR="${PEER_STATE_DIR}/tls"
+CORE_CONFIG="${PEER_STATE_DIR}/core.yaml"
+PRODUCTION_DIR="${PEER_STATE_DIR}/production"
 
 echo "=============================================="
 echo " Starting nested Fabric peer"
@@ -39,28 +30,28 @@ echo "Host peer state : ${HOST_PEER_STATE_DIR}"
 echo
 
 # ============================================================
-# Validate host-side peer state
+# Validate VNF-side peer state
 # ============================================================
 
-if [ ! -d "${HOST_PEER_STATE_DIR}" ]; then
-    echo "Error: host peer state directory does not exist:"
-    echo "  ${HOST_PEER_STATE_DIR}"
+if [ ! -d "${PEER_STATE_DIR}" ]; then
+    echo "Error: peer state directory does not exist:"
+    echo "  ${PEER_STATE_DIR}"
     exit 1
 fi
 
-if [ ! -d "${HOST_MSP_DIR}" ]; then
-    echo "Error: host MSP directory does not exist:"
-    echo "  ${HOST_MSP_DIR}"
+if [ ! -d "${MSP_DIR}" ]; then
+    echo "Error: MSP directory does not exist:"
+    echo "  ${MSP_DIR}"
     exit 1
 fi
 
-if [ ! -d "${HOST_MSP_DIR}/signcerts" ]; then
+if [ ! -d "${MSP_DIR}/signcerts" ]; then
     echo "Error: MSP signcerts directory does not exist:"
-    echo "  ${HOST_MSP_DIR}/signcerts"
+    echo "  ${MSP_DIR}/signcerts"
     exit 1
 fi
 
-if ! find "${HOST_MSP_DIR}/signcerts" \
+if ! find "${MSP_DIR}/signcerts" \
     -type f \
     -name '*.pem' \
     -print \
@@ -70,13 +61,13 @@ then
     exit 1
 fi
 
-if [ ! -d "${HOST_MSP_DIR}/keystore" ]; then
+if [ ! -d "${MSP_DIR}/keystore" ]; then
     echo "Error: MSP keystore directory does not exist:"
-    echo "  ${HOST_MSP_DIR}/keystore"
+    echo "  ${MSP_DIR}/keystore"
     exit 1
 fi
 
-if ! find "${HOST_MSP_DIR}/keystore" \
+if ! find "${MSP_DIR}/keystore" \
     -type f \
     -name '*_sk' \
     -print \
@@ -86,26 +77,26 @@ then
     exit 1
 fi
 
-if [ ! -f "${HOST_MSP_DIR}/config.yaml" ]; then
+if [ ! -f "${MSP_DIR}/config.yaml" ]; then
     echo "Error: MSP config.yaml does not exist:"
-    echo "  ${HOST_MSP_DIR}/config.yaml"
+    echo "  ${MSP_DIR}/config.yaml"
     exit 1
 fi
 
 # ============================================================
-# Validate TLS state
+# Validate VNF-side TLS state
 # ============================================================
 
-if [ ! -d "${HOST_TLS_DIR}" ]; then
-    echo "Error: host TLS directory does not exist:"
-    echo "  ${HOST_TLS_DIR}"
+if [ ! -d "${TLS_DIR}" ]; then
+    echo "Error: TLS directory does not exist:"
+    echo "  ${TLS_DIR}"
     exit 1
 fi
 
 for file in server.crt server.key ca.crt; do
-    if [ ! -f "${HOST_TLS_DIR}/${file}" ]; then
+    if [ ! -f "${TLS_DIR}/${file}" ]; then
         echo "Error: missing TLS file:"
-        echo "  ${HOST_TLS_DIR}/${file}"
+        echo "  ${TLS_DIR}/${file}"
         exit 1
     fi
 done
@@ -114,13 +105,13 @@ done
 # Prepare peer filesystem
 # ============================================================
 
-mkdir -p "${HOST_PRODUCTION_DIR}"
+mkdir -p "${PRODUCTION_DIR}"
 
 # ============================================================
 # Generate peer configuration
 # ============================================================
 
-cat > "${HOST_CORE_CONFIG}" <<EOF
+cat > "${CORE_CONFIG}" <<EOF
 peer:
   id: ${PEER_NAME}
   networkId: dev
@@ -170,7 +161,7 @@ operations:
 EOF
 
 echo "Peer configuration:"
-echo "  ${HOST_CORE_CONFIG}"
+echo "  ${CORE_CONFIG}"
 echo
 
 # ============================================================
@@ -185,13 +176,14 @@ fi
 # ============================================================
 # Start nested Fabric peer
 #
-# IMPORTANT:
-#
 # Docker is using the HOST daemon through:
 #
 #   /var/run/docker.sock
 #
-# Therefore every bind source below must be a HOST path.
+# Therefore HOST_PEER_STATE_DIR is intentionally passed
+# directly to Docker as a host-side bind source.
+#
+# The VNF itself must NOT attempt to access that path.
 # ============================================================
 
 echo "Starting Fabric peer..."
@@ -203,7 +195,7 @@ docker run \
     --network "${XIT_NETWORK}" \
     --ip "${PEER_IP}" \
     -v "${HOST_PEER_STATE_DIR}:/etc/hyperledger/fabric:rw" \
-    -v "${HOST_PRODUCTION_DIR}:/var/hyperledger/production:rw" \
+    -v "${HOST_PEER_STATE_DIR}/production:/var/hyperledger/production:rw" \
     -e FABRIC_CFG_PATH=/etc/hyperledger/fabric \
     -e CORE_PEER_ID="${PEER_NAME}" \
     -e CORE_PEER_ADDRESS="${PEER_HOSTNAME}:7051" \
@@ -220,6 +212,7 @@ docker run \
 echo
 echo "Nested Fabric peer started."
 echo
+
 echo "Container:"
 docker ps --filter "name=${PEER_CONTAINER}"
 

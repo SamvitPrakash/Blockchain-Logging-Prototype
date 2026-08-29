@@ -168,6 +168,7 @@ services:
 
       HOST_UID: "${HOST_UID}"
       HOST_GID: "${HOST_GID}"
+      HOST_PEER_STATE_DIR: "${HOST_PEER_STATE_DIR}"
 
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
