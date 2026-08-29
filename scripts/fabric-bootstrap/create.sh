@@ -13,12 +13,11 @@ TEMPLATE_DIR="$PROJECT_ROOT/templates/fabric-bootstrap"
 BUILD_DIR="$PROJECT_ROOT/build/fabric-bootstrap"
 
 VNFM_NAME="fabric-bootstrap"
-CA_NAME="fabric-ca"
 ORDERER_NAME="fabric-orderer-1"
 
-# ------------------------------------------------------------
+# ============================================================
 # Network addressing
-# ------------------------------------------------------------
+# ============================================================
 
 VNFM_IP="10.10.0.10"
 CA_IP="10.10.0.11"
@@ -26,18 +25,17 @@ ORDERER_IP="10.10.0.20"
 
 XIT_NETWORK="XIT"
 
-# ------------------------------------------------------------
+# ============================================================
 # Host/container paths
-# ------------------------------------------------------------
+# ============================================================
 
-CA_HOST_DATA_DIR="$BUILD_DIR/ca"
 ORDERER_HOST_DATA_DIR="$BUILD_DIR/orderer"
 
 VNFM_STATE_DIR="/opt/fabric-bootstrap-state"
 
-# ------------------------------------------------------------
+# ============================================================
 # Host ownership
-# ------------------------------------------------------------
+# ============================================================
 
 HOST_UID="$(id -u)"
 HOST_GID="$(id -g)"
@@ -52,17 +50,17 @@ if [ ! -d "$PROJECT_ROOT" ]; then
     exit 1
 fi
 
-if [ ! -f "$TEMPLATE_DIR/Dockerfile" ]; then
-    echo "Error: FABRIC-BOOTSTRAP Dockerfile not found:"
-    echo "  $TEMPLATE_DIR/Dockerfile"
-    exit 1
-fi
-
-if [ ! -f "$TEMPLATE_DIR/ca-server-config.yaml" ]; then
-    echo "Error: CA configuration template not found:"
-    echo "  $TEMPLATE_DIR/ca-server-config.yaml"
-    exit 1
-fi
+for file in \
+    Dockerfile \
+    entrypoint.sh \
+    enroll-orderer.sh
+do
+    if [ ! -f "$TEMPLATE_DIR/$file" ]; then
+        echo "Error: FABRIC-BOOTSTRAP template file not found:"
+        echo "  $TEMPLATE_DIR/$file"
+        exit 1
+    fi
+done
 
 if ! docker network inspect "$XIT_NETWORK" >/dev/null 2>&1; then
     echo "Error: XIT network does not exist."
@@ -74,7 +72,6 @@ fi
 
 for container in \
     "$VNFM_NAME" \
-    "$CA_NAME" \
     "$ORDERER_NAME"
 do
     if docker inspect "$container" >/dev/null 2>&1; then
@@ -86,6 +83,11 @@ done
 if [ -d "$BUILD_DIR" ]; then
     echo "Error: build directory already exists:"
     echo "  $BUILD_DIR"
+    echo
+    echo "Remove it before regenerating:"
+    echo
+    echo "  rm -rf ${BUILD_DIR}"
+    echo
     exit 1
 fi
 
@@ -93,17 +95,8 @@ fi
 # Create build directories
 # ============================================================
 
-mkdir -p \
-    "$CA_HOST_DATA_DIR" \
-    "$ORDERER_HOST_DATA_DIR"
-
-# ============================================================
-# Generate CA configuration
-# ============================================================
-
-cp \
-    "$TEMPLATE_DIR/ca-server-config.yaml" \
-    "$CA_HOST_DATA_DIR/fabric-ca-server-config.yaml"
+mkdir -p "$BUILD_DIR"
+mkdir -p "$ORDERER_HOST_DATA_DIR"
 
 # ============================================================
 # Build FABRIC-BOOTSTRAP image
@@ -123,49 +116,11 @@ cat > "$BUILD_DIR/compose.yaml" <<EOF
 services:
 
   # ==========================================================
-  # Fabric CA
-  # ==========================================================
-
-  ${CA_NAME}:
-    image: hyperledger/fabric-ca:1.5.17
-
-    container_name: ${CA_NAME}
-    hostname: ${CA_NAME}
-
-    environment:
-      FABRIC_CA_HOME: /etc/hyperledger/fabric-ca-server
-
-    command:
-      - fabric-ca-server
-      - start
-      - -c
-      - /etc/hyperledger/fabric-ca-server/fabric-ca-server-config.yaml
-      - -b
-      - admin:adminpw
-
-    volumes:
-      - ${CA_HOST_DATA_DIR}:/etc/hyperledger/fabric-ca-server
-
-    networks:
-      xit:
-        ipv4_address: ${CA_IP}
-
-    healthcheck:
-      test:
-        - CMD
-        - fabric-ca-client
-        - getcainfo
-        - -u
-        - http://127.0.0.1:7054
-      interval: 2s
-      timeout: 3s
-      retries: 30
-      start_period: 3s
-
-    restart: unless-stopped
-
-  # ==========================================================
   # Fabric bootstrap
+  #
+  # Short-lived initialization container.
+  #
+  # Fabric CA is external to this Compose project.
   # ==========================================================
 
   ${VNFM_NAME}:
@@ -186,10 +141,6 @@ services:
     volumes:
       - ${BUILD_DIR}:${VNFM_STATE_DIR}
 
-    depends_on:
-      ${CA_NAME}:
-        condition: service_healthy
-
     networks:
       xit:
         ipv4_address: ${VNFM_IP}
@@ -198,6 +149,8 @@ services:
 
   # ==========================================================
   # Fabric orderer
+  #
+  # Starts only after bootstrap exits successfully.
   # ==========================================================
 
   ${ORDERER_NAME}:
@@ -284,19 +237,15 @@ echo " FABRIC-BOOTSTRAP generated"
 echo "=============================================="
 echo
 
-echo "Project root:"
-echo "  ${PROJECT_ROOT}"
+echo "Bootstrap:"
+echo "  Name       : ${VNFM_NAME}"
+echo "  IP         : ${VNFM_IP}"
 echo
 
 echo "Fabric CA:"
-echo "  Name       : ${CA_NAME}"
+echo "  Name       : fabric-ca"
 echo "  IP         : ${CA_IP}"
-echo "  Host data  : ${CA_HOST_DATA_DIR}"
-echo
-
-echo "FABRIC-BOOTSTRAP:"
-echo "  Name       : ${VNFM_NAME}"
-echo "  IP         : ${VNFM_IP}"
+echo "  External to this Compose project"
 echo
 
 echo "Fabric orderer:"

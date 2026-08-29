@@ -3,19 +3,18 @@
 set -e
 
 echo "=============================================="
-echo " FABRIC-BOOTSTRAP"
+echo " Fabric Orderer Bootstrap"
 echo "=============================================="
 echo
 
-echo "FABRIC-BOOTSTRAP name : ${VNFM_NAME}"
-echo "XIT network           : ${XIT_NETWORK}"
-echo "FABRIC-BOOTSTRAP IP   : ${VNFM_IP}"
-echo "CA IP                 : ${CA_IP}"
-echo "Orderer IP            : ${ORDERER_IP}"
+echo "Bootstrap : ${VNFM_NAME}"
+echo "Bootstrap IP : ${VNFM_IP}"
+echo "CA        : ${CA_IP}:7054"
+echo "Orderer   : ${ORDERER_IP}"
 
 echo
 echo "=============================================="
-echo " Initializing Fabric orderer identity"
+echo " Enrolling Fabric orderer"
 echo "=============================================="
 echo
 
@@ -23,7 +22,7 @@ echo
 
 echo
 echo "=============================================="
-echo " FABRIC-BOOTSTRAP complete"
+echo " Fabric Orderer Bootstrap Complete"
 echo "=============================================="
 echo
 

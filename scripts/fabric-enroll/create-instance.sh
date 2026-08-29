@@ -354,4 +354,3 @@ echo "  docker compose -f ${BUILD_DIR}/compose.yaml up -d"
 echo
 echo "The peer will start automatically after enrollment succeeds."
 echo
-EOF
