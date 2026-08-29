@@ -58,7 +58,6 @@ HOST_GID="$(id -g)"
 PEER_SECRET="peerpw"
 PEER_HOSTNAME="${PEER_NAME}"
 
-# Path as seen INSIDE the FABRIC-ENROLL container.
 PEER_STATE_DIR="/opt/fabric-enroll-state/peer"
 
 CA_IP="10.10.0.11"
@@ -72,7 +71,7 @@ for file in \
     entrypoint.sh \
     register-peer.sh \
     enroll-peer.sh \
-    start-peer.sh
+    prepare-peer.sh
 do
     if [ ! -f "$TEMPLATE_DIR/$file" ]; then
         echo "Error: FABRIC-ENROLL template file not found:"
@@ -223,6 +222,7 @@ services:
     volumes:
       - ${HOST_PEER_STATE_DIR}:/etc/hyperledger/fabric:rw
       - ${HOST_PEER_STATE_DIR}/production:/var/hyperledger/production:rw
+      - /var/run/docker.sock:/var/run/docker.sock
 
     command:
       - peer

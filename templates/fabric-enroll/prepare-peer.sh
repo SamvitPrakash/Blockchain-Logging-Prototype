@@ -131,17 +131,16 @@ peer:
       FileKeyStore:
         KeyStore: /etc/hyperledger/fabric/msp/keystore
 
-  vm:
-    endpoint: unix:///var/run/docker.sock
+vm:
+  endpoint: unix:///var/run/docker.sock
 
-  chaincode:
-    mode: net
+chaincode:
+  mode: net
 
-  operations:
-    listenAddress: 0.0.0.0:9443
-
-    tls:
-      enabled: false
+operations:
+  listenAddress: 0.0.0.0:9443
+  tls:
+    enabled: false
 EOF
 
 echo
