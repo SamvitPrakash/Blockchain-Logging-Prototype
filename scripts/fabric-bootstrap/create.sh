@@ -13,6 +13,8 @@ TEMPLATE_DIR="$PROJECT_ROOT/templates/fabric-bootstrap"
 BUILD_DIR="$PROJECT_ROOT/build/fabric-bootstrap"
 
 VNFM_NAME="fabric-bootstrap"
+CA_NAME="fabric-ca"
+ORDERER_NAME="fabric-orderer-1"
 
 # ------------------------------------------------------------
 # Network addressing
@@ -70,10 +72,16 @@ if ! docker network inspect "$XIT_NETWORK" >/dev/null 2>&1; then
     exit 1
 fi
 
-if docker inspect "$VNFM_NAME" >/dev/null 2>&1; then
-    echo "Error: FABRIC-BOOTSTRAP container '${VNFM_NAME}' already exists."
-    exit 1
-fi
+for container in \
+    "$VNFM_NAME" \
+    "$CA_NAME" \
+    "$ORDERER_NAME"
+do
+    if docker inspect "$container" >/dev/null 2>&1; then
+        echo "Error: container '${container}' already exists."
+        exit 1
+    fi
+done
 
 if [ -d "$BUILD_DIR" ]; then
     echo "Error: build directory already exists:"
@@ -113,14 +121,58 @@ docker build \
 
 cat > "$BUILD_DIR/compose.yaml" <<EOF
 services:
+
+  # ==========================================================
+  # Fabric CA
+  # ==========================================================
+
+  ${CA_NAME}:
+    image: hyperledger/fabric-ca:1.5.17
+
+    container_name: ${CA_NAME}
+    hostname: ${CA_NAME}
+
+    environment:
+      FABRIC_CA_HOME: /etc/hyperledger/fabric-ca-server
+
+    command:
+      - fabric-ca-server
+      - start
+      - -c
+      - /etc/hyperledger/fabric-ca-server/fabric-ca-server-config.yaml
+      - -b
+      - admin:adminpw
+
+    volumes:
+      - ${CA_HOST_DATA_DIR}:/etc/hyperledger/fabric-ca-server
+
+    networks:
+      xit:
+        ipv4_address: ${CA_IP}
+
+    healthcheck:
+      test:
+        - CMD
+        - fabric-ca-client
+        - getcainfo
+        - -u
+        - http://127.0.0.1:7054
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 3s
+
+    restart: unless-stopped
+
+  # ==========================================================
+  # Fabric bootstrap
+  # ==========================================================
+
   ${VNFM_NAME}:
     image: ${IMAGE_NAME}
 
     container_name: ${VNFM_NAME}
-
     hostname: ${VNFM_NAME}
-
-    privileged: true
 
     environment:
       VNFM_NAME: "${VNFM_NAME}"
@@ -129,18 +181,73 @@ services:
       ORDERER_IP: "${ORDERER_IP}"
       XIT_NETWORK: "${XIT_NETWORK}"
       VNFM_STATE_DIR: "${VNFM_STATE_DIR}"
-      HOST_CA_DATA_DIR: "${CA_HOST_DATA_DIR}"
-      HOST_ORDERER_DATA_DIR: "${ORDERER_HOST_DATA_DIR}"
+      HOST_ORDERER_DATA_DIR: "${VNFM_STATE_DIR}/orderer"
 
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - ${BUILD_DIR}:${VNFM_STATE_DIR}
+
+    depends_on:
+      ${CA_NAME}:
+        condition: service_healthy
 
     networks:
       xit:
         ipv4_address: ${VNFM_IP}
 
+    restart: "no"
+
+  # ==========================================================
+  # Fabric orderer
+  # ==========================================================
+
+  ${ORDERER_NAME}:
+    image: hyperledger/fabric-orderer:2.5.16
+
+    container_name: ${ORDERER_NAME}
+    hostname: ${ORDERER_NAME}
+
+    depends_on:
+      ${VNFM_NAME}:
+        condition: service_completed_successfully
+
+    environment:
+      FABRIC_CFG_PATH: "/etc/hyperledger/fabric"
+
+      ORDERER_GENERAL_LISTENADDRESS: "0.0.0.0"
+      ORDERER_GENERAL_LISTENPORT: "7050"
+
+      ORDERER_GENERAL_LOCALMSPID: "OrdererMSP"
+      ORDERER_GENERAL_LOCALMSPDIR: "/var/hyperledger/orderer/msp"
+
+      ORDERER_GENERAL_BOOTSTRAPMETHOD: "none"
+
+      ORDERER_CHANNELPARTICIPATION_ENABLED: "true"
+
+      ORDERER_GENERAL_TLS_ENABLED: "true"
+      ORDERER_GENERAL_TLS_PRIVATEKEY: "/var/hyperledger/orderer/tls/server.key"
+      ORDERER_GENERAL_TLS_CERTIFICATE: "/var/hyperledger/orderer/tls/server.crt"
+      ORDERER_GENERAL_TLS_ROOTCAS: "[/var/hyperledger/orderer/tls/ca.crt]"
+
+      ORDERER_GENERAL_CLUSTER_LISTENADDRESS: "0.0.0.0"
+      ORDERER_GENERAL_CLUSTER_LISTENPORT: "7051"
+
+      ORDERER_GENERAL_CLUSTER_SERVERCERTIFICATE: "/var/hyperledger/orderer/tls/server.crt"
+      ORDERER_GENERAL_CLUSTER_SERVERPRIVATEKEY: "/var/hyperledger/orderer/tls/server.key"
+      ORDERER_GENERAL_CLUSTER_ROOTCAS: "[/var/hyperledger/orderer/tls/ca.crt]"
+
+      ORDERER_FILELEDGER_LOCATION: "/var/hyperledger/orderer/production"
+
+    volumes:
+      - ${ORDERER_HOST_DATA_DIR}:/var/hyperledger/orderer
+
+    networks:
+      xit:
+        ipv4_address: ${ORDERER_IP}
+
+    restart: unless-stopped
+
 networks:
+
   xit:
     external: true
     name: ${XIT_NETWORK}
@@ -160,66 +267,6 @@ docker compose \
 echo "Compose configuration is valid."
 
 # ============================================================
-# Generate CA launcher
-# ============================================================
-
-cat > "$BUILD_DIR/start-ca.sh" <<EOF
-#!/bin/bash
-
-set -e
-
-export VNFM_NAME="${VNFM_NAME}"
-export XIT_NETWORK="${XIT_NETWORK}"
-export CA_IP="${CA_IP}"
-export VNFM_STATE_DIR="${VNFM_STATE_DIR}"
-export HOST_CA_DATA_DIR="${CA_HOST_DATA_DIR}"
-export HOST_UID="${HOST_UID}"
-export HOST_GID="${HOST_GID}"
-
-exec docker exec \
-    -e VNFM_NAME \
-    -e XIT_NETWORK \
-    -e CA_IP \
-    -e VNFM_STATE_DIR \
-    -e HOST_CA_DATA_DIR \
-    -e HOST_UID \
-    -e HOST_GID \
-    ${VNFM_NAME} \
-    /opt/fabric-bootstrap/start-ca.sh
-EOF
-
-chmod +x "$BUILD_DIR/start-ca.sh"
-
-# ============================================================
-# Generate Orderer launcher
-# ============================================================
-
-cat > "$BUILD_DIR/start-orderer.sh" <<EOF
-#!/bin/bash
-
-set -e
-
-export VNFM_NAME="${VNFM_NAME}"
-export XIT_NETWORK="${XIT_NETWORK}"
-export CA_IP="${CA_IP}"
-export ORDERER_IP="${ORDERER_IP}"
-export VNFM_STATE_DIR="${VNFM_STATE_DIR}"
-export HOST_ORDERER_DATA_DIR="${ORDERER_HOST_DATA_DIR}"
-
-exec docker exec \
-    -e VNFM_NAME \
-    -e XIT_NETWORK \
-    -e CA_IP \
-    -e ORDERER_IP \
-    -e VNFM_STATE_DIR \
-    -e HOST_ORDERER_DATA_DIR \
-    ${VNFM_NAME} \
-    /opt/fabric-bootstrap/start-orderer.sh
-EOF
-
-chmod +x "$BUILD_DIR/start-orderer.sh"
-
-# ============================================================
 # Ownership
 # ============================================================
 
@@ -236,22 +283,34 @@ echo "=============================================="
 echo " FABRIC-BOOTSTRAP generated"
 echo "=============================================="
 echo
+
 echo "Project root:"
 echo "  ${PROJECT_ROOT}"
 echo
-echo "FABRIC-BOOTSTRAP:"
-echo "  Name       : ${VNFM_NAME}"
-echo "  XIT IP     : ${VNFM_IP}"
-echo
-echo "CA:"
+
+echo "Fabric CA:"
+echo "  Name       : ${CA_NAME}"
 echo "  IP         : ${CA_IP}"
 echo "  Host data  : ${CA_HOST_DATA_DIR}"
 echo
-echo "Orderer:"
+
+echo "FABRIC-BOOTSTRAP:"
+echo "  Name       : ${VNFM_NAME}"
+echo "  IP         : ${VNFM_IP}"
+echo
+
+echo "Fabric orderer:"
+echo "  Name       : ${ORDERER_NAME}"
 echo "  IP         : ${ORDERER_IP}"
 echo "  Host data  : ${ORDERER_HOST_DATA_DIR}"
 echo
-echo "FABRIC-BOOTSTRAP state:"
-echo "  Container  : ${VNFM_STATE_DIR}"
+
+echo "Compose:"
+echo "  ${BUILD_DIR}/compose.yaml"
 echo
+
+echo "Start with:"
+echo "  docker compose -f ${BUILD_DIR}/compose.yaml up -d"
+echo
+
 echo "=============================================="
