@@ -28,11 +28,9 @@ XIT_NETWORK="XIT"
 # Host/container paths
 # ------------------------------------------------------------
 
-# This path is used by the HOST Docker daemon.
 CA_HOST_DATA_DIR="$BUILD_DIR/ca"
 ORDERER_HOST_DATA_DIR="$BUILD_DIR/orderer"
 
-# This path exists INSIDE the VNFM container.
 VNFM_STATE_DIR="/opt/vnfm-state"
 
 # ------------------------------------------------------------
@@ -133,6 +131,9 @@ services:
 
       VNFM_STATE_DIR: "${VNFM_STATE_DIR}"
 
+      HOST_CA_DATA_DIR: "${CA_HOST_DATA_DIR}"
+      HOST_ORDERER_DATA_DIR: "${ORDERER_HOST_DATA_DIR}"
+
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${BUILD_DIR}:${VNFM_STATE_DIR}
@@ -161,7 +162,9 @@ docker compose \
 echo "Compose configuration is valid."
 
 # ============================================================
-# Generate CA launcher
+# Generate manual CA launcher
+#
+# Kept for debugging, although normal startup is now automatic.
 # ============================================================
 
 cat > "$BUILD_DIR/start-ca.sh" <<EOF
@@ -169,22 +172,7 @@ cat > "$BUILD_DIR/start-ca.sh" <<EOF
 
 set -e
 
-export VNFM_NAME="${VNFM_NAME}"
-export XIT_NETWORK="${XIT_NETWORK}"
-export CA_IP="${CA_IP}"
-export VNFM_STATE_DIR="${VNFM_STATE_DIR}"
-export HOST_CA_DATA_DIR="${CA_HOST_DATA_DIR}"
-export HOST_UID="${HOST_UID}"
-export HOST_GID="${HOST_GID}"
-
-exec docker exec \
-    -e VNFM_NAME \
-    -e XIT_NETWORK \
-    -e CA_IP \
-    -e VNFM_STATE_DIR \
-    -e HOST_CA_DATA_DIR \
-    -e HOST_UID \
-    -e HOST_GID \
+docker exec \
     ${VNFM_NAME} \
     /opt/vnfm/start-ca.sh
 EOF
@@ -192,7 +180,9 @@ EOF
 chmod +x "$BUILD_DIR/start-ca.sh"
 
 # ============================================================
-# Generate Orderer launcher
+# Generate manual Orderer launcher
+#
+# Kept for debugging, although normal startup is now automatic.
 # ============================================================
 
 cat > "$BUILD_DIR/start-orderer.sh" <<EOF
@@ -200,22 +190,7 @@ cat > "$BUILD_DIR/start-orderer.sh" <<EOF
 
 set -e
 
-export VNFM_NAME="${VNFM_NAME}"
-export XIT_NETWORK="${XIT_NETWORK}"
-export ORDERER_IP="${ORDERER_IP}"
-export VNFM_STATE_DIR="${VNFM_STATE_DIR}"
-export HOST_ORDERER_DATA_DIR="${ORDERER_HOST_DATA_DIR}"
-export HOST_UID="${HOST_UID}"
-export HOST_GID="${HOST_GID}"
-
-exec docker exec \
-    -e VNFM_NAME \
-    -e XIT_NETWORK \
-    -e ORDERER_IP \
-    -e VNFM_STATE_DIR \
-    -e HOST_ORDERER_DATA_DIR \
-    -e HOST_UID \
-    -e HOST_GID \
+docker exec \
     ${VNFM_NAME} \
     /opt/vnfm/start-orderer.sh
 EOF
@@ -256,5 +231,9 @@ echo "  Host data  : ${ORDERER_HOST_DATA_DIR}"
 echo
 echo "VNFM state:"
 echo "  Container  : ${VNFM_STATE_DIR}"
+echo
+echo "Startup:"
+echo "  CA         : automatic"
+echo "  Orderer    : automatic"
 echo
 echo "=============================================="

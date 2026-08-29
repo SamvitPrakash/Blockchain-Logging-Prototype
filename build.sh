@@ -7,7 +7,6 @@ rm -rf build/*
 ./scripts/vnfm/create.sh
 
 docker compose -f build/vnfm/compose.yaml up -d
-./run-vnfm.sh
+# ./run-vnfm.sh
 
 docker compose -f build/vnf-1/compose.yaml up -d
-
