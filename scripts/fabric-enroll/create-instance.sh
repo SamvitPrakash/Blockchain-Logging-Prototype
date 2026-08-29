@@ -86,6 +86,11 @@ if docker inspect "$VNF_CONTAINER" >/dev/null 2>&1; then
     exit 1
 fi
 
+if docker inspect "$PEER_NAME" >/dev/null 2>&1; then
+    echo "Error: Fabric peer container '${PEER_NAME}' already exists."
+    exit 1
+fi
+
 if ! docker network inspect "$OAM_NETWORK" >/dev/null 2>&1; then
     echo "Error: OAM network '${OAM_NETWORK}' does not exist."
     echo
@@ -141,6 +146,11 @@ docker build \
 
 cat > "$BUILD_DIR/compose.yaml" <<EOF
 services:
+
+  # ==========================================================
+  # Fabric enrollment
+  # ==========================================================
+
   ${VNF_CONTAINER}:
     image: ${IMAGE_NAME}
     container_name: ${VNF_CONTAINER}
@@ -171,7 +181,6 @@ services:
       HOST_PEER_STATE_DIR: "${HOST_PEER_STATE_DIR}"
 
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - ${BUILD_DIR}:/opt/fabric-enroll-state
 
     networks:
@@ -181,7 +190,53 @@ services:
       xit:
         ipv4_address: ${VNF_XIT_IP}
 
+    restart: "no"
+
+  # ==========================================================
+  # Fabric peer
+  # ==========================================================
+
+  ${PEER_NAME}:
+    image: hyperledger/fabric-peer:2.5
+    container_name: ${PEER_NAME}
+    hostname: ${PEER_HOSTNAME}
+
+    depends_on:
+      ${VNF_CONTAINER}:
+        condition: service_completed_successfully
+
+    environment:
+      FABRIC_CFG_PATH: "/etc/hyperledger/fabric"
+
+      CORE_PEER_ID: "${PEER_NAME}"
+      CORE_PEER_ADDRESS: "${PEER_HOSTNAME}:7051"
+      CORE_PEER_LISTENADDRESS: "0.0.0.0:7051"
+
+      CORE_PEER_LOCALMSPID: "Org1MSP"
+      CORE_PEER_MSPCONFIGPATH: "/etc/hyperledger/fabric/msp"
+
+      CORE_PEER_TLS_ENABLED: "true"
+      CORE_PEER_TLS_CERT_FILE: "/etc/hyperledger/fabric/tls/server.crt"
+      CORE_PEER_TLS_KEY_FILE: "/etc/hyperledger/fabric/tls/server.key"
+      CORE_PEER_TLS_ROOTCERT_FILE: "/etc/hyperledger/fabric/tls/ca.crt"
+
+    volumes:
+      - ${HOST_PEER_STATE_DIR}:/etc/hyperledger/fabric:rw
+      - ${HOST_PEER_STATE_DIR}/production:/var/hyperledger/production:rw
+
+    command:
+      - peer
+      - node
+      - start
+
+    networks:
+      xit:
+        ipv4_address: ${PEER_IP}
+
+    restart: unless-stopped
+
 networks:
+
   oam:
     external: true
     name: ${OAM_NETWORK}
@@ -248,18 +303,9 @@ cat > "$BUILD_DIR/start-peer.sh" <<EOF
 
 set -euo pipefail
 
-docker exec \
-    -e VNF_INSTANCE="${INSTANCE}" \
-    -e VNF_NAME="${VNF_NAME}" \
-    -e VNF_STATE_DIR="/opt/fabric-enroll-state" \
-    -e PEER_NAME="${PEER_NAME}" \
-    -e PEER_HOSTNAME="${PEER_HOSTNAME}" \
-    -e PEER_IP="${PEER_IP}" \
-    -e PEER_STATE_DIR="${PEER_STATE_DIR}" \
-    -e HOST_PEER_STATE_DIR="${HOST_PEER_STATE_DIR}" \
-    -e XIT_NETWORK="${XIT_NETWORK}" \
-    "${VNF_CONTAINER}" \
-    /opt/fabric-enroll/start-peer.sh
+docker compose \
+    -f "${BUILD_DIR}/compose.yaml" \
+    up -d "${PEER_NAME}"
 EOF
 
 chmod +x \
@@ -283,7 +329,7 @@ echo "  OAM        : ${OAM_NETWORK}"
 echo "  OAM IP     : ${OAM_IP}"
 echo "  XIT IP     : ${VNF_XIT_IP}"
 echo
-echo "Nested peer:"
+echo "Fabric peer:"
 echo "  Name       : ${PEER_NAME}"
 echo "  Hostname   : ${PEER_HOSTNAME}"
 echo "  XIT IP     : ${PEER_IP}"
@@ -306,9 +352,6 @@ echo "Start FABRIC-ENROLL with:"
 echo
 echo "  docker compose -f ${BUILD_DIR}/compose.yaml up -d"
 echo
-echo "Then:"
+echo "The peer will start automatically after enrollment succeeds."
 echo
-echo "  ${BUILD_DIR}/register-peer.sh"
-echo "  ${BUILD_DIR}/enroll-peer.sh"
-echo "  ${BUILD_DIR}/start-peer.sh"
-echo
+EOF

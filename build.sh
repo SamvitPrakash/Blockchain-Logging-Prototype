@@ -1,4 +1,4 @@
-docker rm -f fabric-enroll-1 fabric-bootstrap fabric-ca fabric-orderer-1
+docker rm -f fabric-enroll-1 fabric-bootstrap fabric-ca fabric-orderer-1 fabric-peer-1
 
 rm -rf build/*
 

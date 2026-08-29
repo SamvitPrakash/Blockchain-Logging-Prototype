@@ -9,10 +9,10 @@ echo "=============================================="
 echo
 echo "FABRIC-ENROLL instance : ${VNF_INSTANCE}"
 echo "FABRIC-ENROLL name     : ${VNF_NAME}"
-echo "OAM network  : ${OAM_NETWORK}"
-echo "OAM address  : ${OAM_IP}"
-echo "XIT network  : ${XIT_NETWORK}"
-echo "Peer address : ${PEER_IP}"
+echo "OAM network            : ${OAM_NETWORK}"
+echo "OAM address            : ${OAM_IP}"
+echo "XIT network            : ${XIT_NETWORK}"
+echo "Peer address           : ${PEER_IP}"
 echo
 
 : "${VNF_INSTANCE:?VNF_INSTANCE is required}"
@@ -27,7 +27,6 @@ CA_IP="${CA_IP:-10.10.0.11}"
 CA_PORT="${CA_PORT:-7054}"
 
 echo "Waiting for Fabric CA at ${CA_IP}:${CA_PORT}..."
-
 until (echo >"/dev/tcp/${CA_IP}/${CA_PORT}") >/dev/null 2>&1; do
     echo "  Fabric CA not ready, retrying..."
     sleep 2
@@ -51,15 +50,11 @@ echo "=============================================="
 
 echo
 echo "=============================================="
-echo " Starting nested Fabric peer"
-echo "=============================================="
-
-/opt/fabric-enroll/start-peer.sh
-
-echo
-echo "=============================================="
-echo " FABRIC-ENROLL ready"
+echo " FABRIC-ENROLL complete"
 echo "=============================================="
 echo
+echo "Peer identity has been generated successfully."
+echo "Exiting initialization container."
+echo
 
-exec sleep infinity
+exit 0
