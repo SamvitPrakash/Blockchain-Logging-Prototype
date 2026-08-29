@@ -50,10 +50,17 @@ echo "=============================================="
 
 echo
 echo "=============================================="
+echo " Preparing peer configuration"
+echo "=============================================="
+
+/opt/fabric-enroll/prepare-peer.sh
+
+echo
+echo "=============================================="
 echo " FABRIC-ENROLL complete"
 echo "=============================================="
 echo
-echo "Peer identity has been generated successfully."
+echo "Peer identity and configuration have been generated."
 echo "Exiting initialization container."
 echo
 

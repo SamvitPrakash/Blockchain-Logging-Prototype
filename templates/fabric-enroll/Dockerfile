@@ -1,4 +1,5 @@
 FROM hyperledger/fabric-ca:1.5.17 AS fabric-ca
+
 FROM docker:cli AS docker-cli
 
 FROM debian:bookworm-slim
@@ -20,12 +21,14 @@ WORKDIR /opt/fabric-enroll
 COPY entrypoint.sh /opt/fabric-enroll/entrypoint.sh
 COPY register-peer.sh /opt/fabric-enroll/register-peer.sh
 COPY enroll-peer.sh /opt/fabric-enroll/enroll-peer.sh
+COPY prepare-peer.sh /opt/fabric-enroll/prepare-peer.sh
 COPY start-peer.sh /opt/fabric-enroll/start-peer.sh
 
 RUN chmod +x \
     /opt/fabric-enroll/entrypoint.sh \
     /opt/fabric-enroll/register-peer.sh \
     /opt/fabric-enroll/enroll-peer.sh \
+    /opt/fabric-enroll/prepare-peer.sh \
     /opt/fabric-enroll/start-peer.sh
 
 ENTRYPOINT ["/opt/fabric-enroll/entrypoint.sh"]
