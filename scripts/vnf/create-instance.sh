@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+set -euo pipefail
 
 # ============================================================
 # VNF Instance Generator
@@ -27,6 +27,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 TEMPLATE_DIR="$PROJECT_ROOT/templates/vnf"
 BUILD_DIR="$PROJECT_ROOT/build/vnf-${INSTANCE}"
+HOST_PEER_STATE_DIR="$BUILD_DIR/peer"
 
 # ============================================================
 # Naming
@@ -56,6 +57,8 @@ HOST_GID="$(id -g)"
 
 PEER_SECRET="peerpw"
 PEER_HOSTNAME="${PEER_NAME}"
+
+# Path as seen INSIDE the VNF container.
 PEER_STATE_DIR="/opt/vnf-state/peer"
 
 CA_IP="10.10.0.11"
@@ -64,31 +67,19 @@ CA_IP="10.10.0.11"
 # Validation
 # ============================================================
 
-if [ ! -f "$TEMPLATE_DIR/Dockerfile" ]; then
-    echo "Error: VNF Dockerfile not found:"
-    echo "  $TEMPLATE_DIR/Dockerfile"
-    exit 1
-fi
-
-if [ ! -f "$TEMPLATE_DIR/entrypoint.sh" ]; then
-    echo "Error: VNF entrypoint not found."
-    exit 1
-fi
-
-if [ ! -f "$TEMPLATE_DIR/register-peer.sh" ]; then
-    echo "Error: register-peer.sh not found."
-    exit 1
-fi
-
-if [ ! -f "$TEMPLATE_DIR/enroll-peer.sh" ]; then
-    echo "Error: enroll-peer.sh not found."
-    exit 1
-fi
-
-if [ ! -f "$TEMPLATE_DIR/start-peer.sh" ]; then
-    echo "Error: start-peer.sh not found."
-    exit 1
-fi
+for file in \
+    Dockerfile \
+    entrypoint.sh \
+    register-peer.sh \
+    enroll-peer.sh \
+    start-peer.sh
+do
+    if [ ! -f "$TEMPLATE_DIR/$file" ]; then
+        echo "Error: VNF template file not found:"
+        echo "  $TEMPLATE_DIR/$file"
+        exit 1
+    fi
+done
 
 if docker inspect "$VNF_CONTAINER" >/dev/null 2>&1; then
     echo "Error: VNF container '${VNF_CONTAINER}' already exists."
@@ -127,10 +118,12 @@ if [ -d "$BUILD_DIR" ]; then
 fi
 
 # ============================================================
-# Create build directory
+# Create build directories
 # ============================================================
 
-mkdir -p "$BUILD_DIR"
+mkdir -p \
+    "$BUILD_DIR" \
+    "$HOST_PEER_STATE_DIR"
 
 # ============================================================
 # Build VNF image
@@ -164,17 +157,17 @@ services:
       OAM_IP: "${OAM_IP}"
 
       XIT_NETWORK: "${XIT_NETWORK}"
-      PEER_IP: "${PEER_IP}"
-
-      HOST_UID: "${HOST_UID}"
-      HOST_GID: "${HOST_GID}"
 
       PEER_NAME: "${PEER_NAME}"
       PEER_SECRET: "${PEER_SECRET}"
       PEER_HOSTNAME: "${PEER_HOSTNAME}"
+      PEER_IP: "${PEER_IP}"
       PEER_STATE_DIR: "${PEER_STATE_DIR}"
 
       CA_IP: "${CA_IP}"
+
+      HOST_UID: "${HOST_UID}"
+      HOST_GID: "${HOST_GID}"
 
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -198,64 +191,73 @@ networks:
 EOF
 
 # ============================================================
-# Generate host-side helper scripts
+# Generate host-side register helper
 # ============================================================
 
 cat > "$BUILD_DIR/register-peer.sh" <<EOF
 #!/bin/bash
 
-set -e
+set -euo pipefail
 
-docker exec \\
-    -e VNF_INSTANCE="${INSTANCE}" \\
-    -e VNF_NAME="${VNF_NAME}" \\
-    -e VNF_STATE_DIR="/opt/vnf-state" \\
-    -e PEER_NAME="${PEER_NAME}" \\
-    -e PEER_SECRET="${PEER_SECRET}" \\
-    -e PEER_HOSTNAME="${PEER_HOSTNAME}" \\
-    -e PEER_IP="${PEER_IP}" \\
-    -e PEER_STATE_DIR="${PEER_STATE_DIR}" \\
-    -e CA_IP="${CA_IP}" \\
-    "${VNF_CONTAINER}" \\
+docker exec \
+    -e VNF_INSTANCE="${INSTANCE}" \
+    -e VNF_NAME="${VNF_NAME}" \
+    -e VNF_STATE_DIR="/opt/vnf-state" \
+    -e PEER_NAME="${PEER_NAME}" \
+    -e PEER_SECRET="${PEER_SECRET}" \
+    -e PEER_HOSTNAME="${PEER_HOSTNAME}" \
+    -e PEER_IP="${PEER_IP}" \
+    -e PEER_STATE_DIR="${PEER_STATE_DIR}" \
+    -e CA_IP="${CA_IP}" \
+    "${VNF_CONTAINER}" \
     /opt/vnf/register-peer.sh
 EOF
+
+# ============================================================
+# Generate host-side enroll helper
+# ============================================================
 
 cat > "$BUILD_DIR/enroll-peer.sh" <<EOF
 #!/bin/bash
 
-set -e
+set -euo pipefail
 
-docker exec \\
-    -e VNF_INSTANCE="${INSTANCE}" \\
-    -e VNF_NAME="${VNF_NAME}" \\
-    -e VNF_STATE_DIR="/opt/vnf-state" \\
-    -e PEER_NAME="${PEER_NAME}" \\
-    -e PEER_SECRET="${PEER_SECRET}" \\
-    -e PEER_HOSTNAME="${PEER_HOSTNAME}" \\
-    -e PEER_IP="${PEER_IP}" \\
-    -e PEER_STATE_DIR="${PEER_STATE_DIR}" \\
-    -e CA_IP="${CA_IP}" \\
-    -e HOST_UID="${HOST_UID}" \\
-    -e HOST_GID="${HOST_GID}" \\
-    "${VNF_CONTAINER}" \\
+docker exec \
+    -e VNF_INSTANCE="${INSTANCE}" \
+    -e VNF_NAME="${VNF_NAME}" \
+    -e VNF_STATE_DIR="/opt/vnf-state" \
+    -e PEER_NAME="${PEER_NAME}" \
+    -e PEER_SECRET="${PEER_SECRET}" \
+    -e PEER_HOSTNAME="${PEER_HOSTNAME}" \
+    -e PEER_IP="${PEER_IP}" \
+    -e PEER_STATE_DIR="${PEER_STATE_DIR}" \
+    -e CA_IP="${CA_IP}" \
+    -e HOST_UID="${HOST_UID}" \
+    -e HOST_GID="${HOST_GID}" \
+    "${VNF_CONTAINER}" \
     /opt/vnf/enroll-peer.sh
 EOF
+
+# ============================================================
+# Generate host-side start helper
+# ============================================================
 
 cat > "$BUILD_DIR/start-peer.sh" <<EOF
 #!/bin/bash
 
-set -e
+set -euo pipefail
 
-docker exec \\
-    -e VNF_INSTANCE="${INSTANCE}" \\
-    -e VNF_NAME="${VNF_NAME}" \\
-    -e VNF_STATE_DIR="/opt/vnf-state" \\
-    -e PEER_NAME="${PEER_NAME}" \\
-    -e PEER_HOSTNAME="${PEER_HOSTNAME}" \\
-    -e PEER_IP="${PEER_IP}" \\
-    -e PEER_STATE_DIR="${PEER_STATE_DIR}" \\
-    -e XIT_NETWORK="${XIT_NETWORK}" \\
-    "${VNF_CONTAINER}" \\
+docker exec \
+    -e VNF_INSTANCE="${INSTANCE}" \
+    -e VNF_NAME="${VNF_NAME}" \
+    -e VNF_STATE_DIR="/opt/vnf-state" \
+    -e PEER_NAME="${PEER_NAME}" \
+    -e PEER_HOSTNAME="${PEER_HOSTNAME}" \
+    -e PEER_IP="${PEER_IP}" \
+    -e PEER_STATE_DIR="${PEER_STATE_DIR}" \
+    -e HOST_PEER_STATE_DIR="${HOST_PEER_STATE_DIR}" \
+    -e XIT_NETWORK="${XIT_NETWORK}" \
+    "${VNF_CONTAINER}" \
     /opt/vnf/start-peer.sh
 EOF
 
@@ -284,6 +286,10 @@ echo "Nested peer:"
 echo "  Name       : ${PEER_NAME}"
 echo "  Hostname   : ${PEER_HOSTNAME}"
 echo "  XIT IP     : ${PEER_IP}"
+echo
+echo "State:"
+echo "  Container  : ${PEER_STATE_DIR}"
+echo "  Host       : ${HOST_PEER_STATE_DIR}"
 echo
 echo "Host:"
 echo "  UID        : ${HOST_UID}"
