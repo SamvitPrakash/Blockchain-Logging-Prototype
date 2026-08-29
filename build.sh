@@ -1,4 +1,4 @@
-docker rm -f vnf-1 vnfm fabric-ca
+docker rm -f vnf-1 vnfm fabric-ca fabric-orderer-1
 
 rm -rf build/*
 

@@ -61,8 +61,8 @@ export FABRIC_CA_CLIENT_HOME="${CLIENT_HOME}/ca-admin"
 fabric-ca-client register \
     --id.name "${PEER_NAME}" \
     --id.secret "${PEER_SECRET}" \
+    --id.affiliation "org1" \
     --id.type peer \
-    --id.affiliation "org1.peer" \
     -u "${CA_URL}"
 
 echo
@@ -73,7 +73,7 @@ echo
 echo "Peer:"
 echo "  Name       : ${PEER_NAME}"
 echo "  Secret     : ${PEER_SECRET}"
-echo "  Affiliation: org1.peer"
+echo "  Affiliation: org1"
 echo
 echo "Next:"
 echo
