@@ -3,7 +3,7 @@
 set -euo pipefail
 
 # ============================================================
-# VNF Instance Generator
+# FABRIC-ENROLL Instance Generator
 # ============================================================
 
 if [ "$#" -ne 1 ]; then
@@ -25,16 +25,16 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-TEMPLATE_DIR="$PROJECT_ROOT/templates/vnf"
-BUILD_DIR="$PROJECT_ROOT/build/vnf-${INSTANCE}"
+TEMPLATE_DIR="$PROJECT_ROOT/templates/fabric-enroll"
+BUILD_DIR="$PROJECT_ROOT/build/fabric-enroll-${INSTANCE}"
 HOST_PEER_STATE_DIR="$BUILD_DIR/peer"
 
 # ============================================================
 # Naming
 # ============================================================
 
-VNF_NAME="vnf-${INSTANCE}"
-VNF_CONTAINER="vnf-${INSTANCE}"
+VNF_NAME="fabric-enroll-${INSTANCE}"
+VNF_CONTAINER="fabric-enroll-${INSTANCE}"
 PEER_NAME="fabric-peer-${INSTANCE}"
 
 OAM_NETWORK="OAM-${INSTANCE}"
@@ -58,8 +58,8 @@ HOST_GID="$(id -g)"
 PEER_SECRET="peerpw"
 PEER_HOSTNAME="${PEER_NAME}"
 
-# Path as seen INSIDE the VNF container.
-PEER_STATE_DIR="/opt/vnf-state/peer"
+# Path as seen INSIDE the FABRIC-ENROLL container.
+PEER_STATE_DIR="/opt/fabric-enroll-state/peer"
 
 CA_IP="10.10.0.11"
 
@@ -75,14 +75,14 @@ for file in \
     start-peer.sh
 do
     if [ ! -f "$TEMPLATE_DIR/$file" ]; then
-        echo "Error: VNF template file not found:"
+        echo "Error: FABRIC-ENROLL template file not found:"
         echo "  $TEMPLATE_DIR/$file"
         exit 1
     fi
 done
 
 if docker inspect "$VNF_CONTAINER" >/dev/null 2>&1; then
-    echo "Error: VNF container '${VNF_CONTAINER}' already exists."
+    echo "Error: FABRIC-ENROLL container '${VNF_CONTAINER}' already exists."
     exit 1
 fi
 
@@ -126,10 +126,10 @@ mkdir -p \
     "$HOST_PEER_STATE_DIR"
 
 # ============================================================
-# Build VNF image
+# Build FABRIC-ENROLL image
 # ============================================================
 
-IMAGE_NAME="blockchain-vnf:latest"
+IMAGE_NAME="blockchain-fabric-enroll:latest"
 
 docker build \
     -t "$IMAGE_NAME" \
@@ -150,7 +150,7 @@ services:
 
     environment:
       VNF_INSTANCE: "${INSTANCE}"
-      VNF_STATE_DIR: "/opt/vnf-state"
+      VNF_STATE_DIR: "/opt/fabric-enroll-state"
       VNF_NAME: "${VNF_NAME}"
 
       OAM_NETWORK: "${OAM_NETWORK}"
@@ -172,7 +172,7 @@ services:
 
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ${BUILD_DIR}:/opt/vnf-state
+      - ${BUILD_DIR}:/opt/fabric-enroll-state
 
     networks:
       oam:
@@ -203,7 +203,7 @@ set -euo pipefail
 docker exec \
     -e VNF_INSTANCE="${INSTANCE}" \
     -e VNF_NAME="${VNF_NAME}" \
-    -e VNF_STATE_DIR="/opt/vnf-state" \
+    -e VNF_STATE_DIR="/opt/fabric-enroll-state" \
     -e PEER_NAME="${PEER_NAME}" \
     -e PEER_SECRET="${PEER_SECRET}" \
     -e PEER_HOSTNAME="${PEER_HOSTNAME}" \
@@ -211,7 +211,7 @@ docker exec \
     -e PEER_STATE_DIR="${PEER_STATE_DIR}" \
     -e CA_IP="${CA_IP}" \
     "${VNF_CONTAINER}" \
-    /opt/vnf/register-peer.sh
+    /opt/fabric-enroll/register-peer.sh
 EOF
 
 # ============================================================
@@ -226,7 +226,7 @@ set -euo pipefail
 docker exec \
     -e VNF_INSTANCE="${INSTANCE}" \
     -e VNF_NAME="${VNF_NAME}" \
-    -e VNF_STATE_DIR="/opt/vnf-state" \
+    -e VNF_STATE_DIR="/opt/fabric-enroll-state" \
     -e PEER_NAME="${PEER_NAME}" \
     -e PEER_SECRET="${PEER_SECRET}" \
     -e PEER_HOSTNAME="${PEER_HOSTNAME}" \
@@ -236,7 +236,7 @@ docker exec \
     -e HOST_UID="${HOST_UID}" \
     -e HOST_GID="${HOST_GID}" \
     "${VNF_CONTAINER}" \
-    /opt/vnf/enroll-peer.sh
+    /opt/fabric-enroll/enroll-peer.sh
 EOF
 
 # ============================================================
@@ -251,7 +251,7 @@ set -euo pipefail
 docker exec \
     -e VNF_INSTANCE="${INSTANCE}" \
     -e VNF_NAME="${VNF_NAME}" \
-    -e VNF_STATE_DIR="/opt/vnf-state" \
+    -e VNF_STATE_DIR="/opt/fabric-enroll-state" \
     -e PEER_NAME="${PEER_NAME}" \
     -e PEER_HOSTNAME="${PEER_HOSTNAME}" \
     -e PEER_IP="${PEER_IP}" \
@@ -259,7 +259,7 @@ docker exec \
     -e HOST_PEER_STATE_DIR="${HOST_PEER_STATE_DIR}" \
     -e XIT_NETWORK="${XIT_NETWORK}" \
     "${VNF_CONTAINER}" \
-    /opt/vnf/start-peer.sh
+    /opt/fabric-enroll/start-peer.sh
 EOF
 
 chmod +x \
@@ -273,10 +273,10 @@ chmod +x \
 
 echo
 echo "=============================================="
-echo " VNF instance generated"
+echo " FABRIC-ENROLL instance generated"
 echo "=============================================="
 echo
-echo "VNF:"
+echo "FABRIC-ENROLL:"
 echo "  Name       : ${VNF_NAME}"
 echo "  Container  : ${VNF_CONTAINER}"
 echo "  OAM        : ${OAM_NETWORK}"
@@ -302,7 +302,7 @@ echo "  ${BUILD_DIR}/register-peer.sh"
 echo "  ${BUILD_DIR}/enroll-peer.sh"
 echo "  ${BUILD_DIR}/start-peer.sh"
 echo
-echo "Start VNF with:"
+echo "Start FABRIC-ENROLL with:"
 echo
 echo "  docker compose -f ${BUILD_DIR}/compose.yaml up -d"
 echo

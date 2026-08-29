@@ -3,12 +3,12 @@
 set -euo pipefail
 
 echo "=============================================="
-echo " Starting VNF"
+echo " Starting FABRIC-ENROLL"
 echo "=============================================="
 
 echo
-echo "VNF instance : ${VNF_INSTANCE}"
-echo "VNF name     : ${VNF_NAME}"
+echo "FABRIC-ENROLL instance : ${VNF_INSTANCE}"
+echo "FABRIC-ENROLL name     : ${VNF_NAME}"
 echo "OAM network  : ${OAM_NETWORK}"
 echo "OAM address  : ${OAM_IP}"
 echo "XIT network  : ${XIT_NETWORK}"
@@ -40,25 +40,25 @@ echo "=============================================="
 echo " Registering peer"
 echo "=============================================="
 
-/opt/vnf/register-peer.sh
+/opt/fabric-enroll/register-peer.sh
 
 echo
 echo "=============================================="
 echo " Enrolling peer"
 echo "=============================================="
 
-/opt/vnf/enroll-peer.sh
+/opt/fabric-enroll/enroll-peer.sh
 
 echo
 echo "=============================================="
 echo " Starting nested Fabric peer"
 echo "=============================================="
 
-/opt/vnf/start-peer.sh
+/opt/fabric-enroll/start-peer.sh
 
 echo
 echo "=============================================="
-echo " VNF ready"
+echo " FABRIC-ENROLL ready"
 echo "=============================================="
 echo
 

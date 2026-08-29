@@ -3,12 +3,12 @@
 set -e
 
 echo "=============================================="
-echo " VNFM"
+echo " FABRIC-BOOTSTRAP"
 echo "=============================================="
 echo
-echo "VNFM name    : ${VNFM_NAME}"
+echo "FABRIC-BOOTSTRAP name    : ${VNFM_NAME}"
 echo "XIT network  : ${XIT_NETWORK}"
-echo "VNFM IP      : ${VNFM_IP}"
+echo "FABRIC-BOOTSTRAP IP      : ${VNFM_IP}"
 echo "CA IP        : ${CA_IP}"
 echo "Orderer IP   : ${ORDERER_IP}"
 echo
@@ -17,18 +17,18 @@ echo " Starting nested Fabric services"
 echo "=============================================="
 echo
 
-/opt/vnfm/start-ca.sh
+/opt/fabric-bootstrap/start-ca.sh
 
 echo "CA initialization complete."
 echo
 
-/opt/vnfm/start-orderer.sh
+/opt/fabric-bootstrap/start-orderer.sh
 
 echo "Orderer initialization complete."
 echo
 
 echo "=============================================="
-echo " VNFM startup complete"
+echo " FABRIC-BOOTSTRAP startup complete"
 echo "=============================================="
 echo
 

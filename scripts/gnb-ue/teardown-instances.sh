@@ -24,10 +24,10 @@ done
 
 echo
 echo "=============================================="
-echo " Stopping VNF instances"
+echo " Stopping FABRIC-ENROLL instances"
 echo "=============================================="
 
-for compose_file in build/vnf-*/compose.yaml; do
+for compose_file in build/fabric-enroll-*/compose.yaml; do
     [ -e "$compose_file" ] || continue
 
     echo

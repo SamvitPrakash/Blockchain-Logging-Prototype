@@ -3,16 +3,16 @@
 set -e
 
 # ============================================================
-# VNFM Generator
+# FABRIC-BOOTSTRAP Generator
 # ============================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(realpath "$SCRIPT_DIR/../..")"
 
-TEMPLATE_DIR="$PROJECT_ROOT/templates/vnfm"
-BUILD_DIR="$PROJECT_ROOT/build/vnfm"
+TEMPLATE_DIR="$PROJECT_ROOT/templates/fabric-bootstrap"
+BUILD_DIR="$PROJECT_ROOT/build/fabric-bootstrap"
 
-VNFM_NAME="vnfm"
+VNFM_NAME="fabric-bootstrap"
 
 # ------------------------------------------------------------
 # Network addressing
@@ -31,7 +31,7 @@ XIT_NETWORK="XIT"
 CA_HOST_DATA_DIR="$BUILD_DIR/ca"
 ORDERER_HOST_DATA_DIR="$BUILD_DIR/orderer"
 
-VNFM_STATE_DIR="/opt/vnfm-state"
+VNFM_STATE_DIR="/opt/fabric-bootstrap-state"
 
 # ------------------------------------------------------------
 # Host ownership
@@ -51,7 +51,7 @@ if [ ! -d "$PROJECT_ROOT" ]; then
 fi
 
 if [ ! -f "$TEMPLATE_DIR/Dockerfile" ]; then
-    echo "Error: VNFM Dockerfile not found:"
+    echo "Error: FABRIC-BOOTSTRAP Dockerfile not found:"
     echo "  $TEMPLATE_DIR/Dockerfile"
     exit 1
 fi
@@ -71,7 +71,7 @@ if ! docker network inspect "$XIT_NETWORK" >/dev/null 2>&1; then
 fi
 
 if docker inspect "$VNFM_NAME" >/dev/null 2>&1; then
-    echo "Error: VNFM container '${VNFM_NAME}' already exists."
+    echo "Error: FABRIC-BOOTSTRAP container '${VNFM_NAME}' already exists."
     exit 1
 fi
 
@@ -98,10 +98,10 @@ cp \
     "$CA_HOST_DATA_DIR/fabric-ca-server-config.yaml"
 
 # ============================================================
-# Build VNFM image
+# Build FABRIC-BOOTSTRAP image
 # ============================================================
 
-IMAGE_NAME="blockchain-vnfm:latest"
+IMAGE_NAME="blockchain-fabric-bootstrap:latest"
 
 docker build \
     -t "$IMAGE_NAME" \
@@ -185,7 +185,7 @@ exec docker exec \
     -e HOST_UID \
     -e HOST_GID \
     ${VNFM_NAME} \
-    /opt/vnfm/start-ca.sh
+    /opt/fabric-bootstrap/start-ca.sh
 EOF
 
 chmod +x "$BUILD_DIR/start-ca.sh"
@@ -214,7 +214,7 @@ exec docker exec \
     -e VNFM_STATE_DIR \
     -e HOST_ORDERER_DATA_DIR \
     ${VNFM_NAME} \
-    /opt/vnfm/start-orderer.sh
+    /opt/fabric-bootstrap/start-orderer.sh
 EOF
 
 chmod +x "$BUILD_DIR/start-orderer.sh"
@@ -233,13 +233,13 @@ chown -R \
 
 echo
 echo "=============================================="
-echo " VNFM generated"
+echo " FABRIC-BOOTSTRAP generated"
 echo "=============================================="
 echo
 echo "Project root:"
 echo "  ${PROJECT_ROOT}"
 echo
-echo "VNFM:"
+echo "FABRIC-BOOTSTRAP:"
 echo "  Name       : ${VNFM_NAME}"
 echo "  XIT IP     : ${VNFM_IP}"
 echo
@@ -251,7 +251,7 @@ echo "Orderer:"
 echo "  IP         : ${ORDERER_IP}"
 echo "  Host data  : ${ORDERER_HOST_DATA_DIR}"
 echo
-echo "VNFM state:"
+echo "FABRIC-BOOTSTRAP state:"
 echo "  Container  : ${VNFM_STATE_DIR}"
 echo
 echo "=============================================="

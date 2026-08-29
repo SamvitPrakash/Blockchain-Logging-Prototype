@@ -1,8 +1,8 @@
 #!/bin/bash
 
-./build/vnfm/start-ca.sh
-./build/vnfm/start-orderer.sh
+./build/fabric-bootstrap/start-ca.sh
+./build/fabric-bootstrap/start-orderer.sh
 
-# ./build/vnf-1/register-peer.sh
-# ./build/vnf-1/enroll-peer.sh
-# ./build/vnf-1/start-peer.sh
+# ./build/fabric-enroll-1/register-peer.sh
+# ./build/fabric-enroll-1/enroll-peer.sh
+# ./build/fabric-enroll-1/start-peer.sh

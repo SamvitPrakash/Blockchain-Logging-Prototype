@@ -1,12 +1,12 @@
-docker rm -f vnf-1 vnfm fabric-ca fabric-orderer-1
+docker rm -f fabric-enroll-1 fabric-bootstrap fabric-ca fabric-orderer-1
 
 rm -rf build/*
 
-./scripts/vnf/create-instance.sh 1
+./scripts/fabric-enroll/create-instance.sh 1
 
-./scripts/vnfm/create.sh
+./scripts/fabric-bootstrap/create.sh
 
-docker compose -f build/vnfm/compose.yaml up -d
-# ./run-vnfm.sh
+docker compose -f build/fabric-bootstrap/compose.yaml up -d
+# ./run-fabric-bootstrap.sh
 
-docker compose -f build/vnf-1/compose.yaml up -d
+docker compose -f build/fabric-enroll-1/compose.yaml up -d

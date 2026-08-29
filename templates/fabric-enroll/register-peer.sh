@@ -3,7 +3,7 @@
 set -eu
 
 # ============================================================
-# VNF nested Fabric peer registration
+# FABRIC-ENROLL nested Fabric peer registration
 # ============================================================
 
 : "${VNF_INSTANCE:?VNF_INSTANCE is required}"
@@ -77,5 +77,5 @@ echo "  Affiliation: org1"
 echo
 echo "Next:"
 echo
-echo "  ./build/vnf-${VNF_INSTANCE}/enroll-peer.sh"
+echo "  ./build/fabric-enroll-${VNF_INSTANCE}/enroll-peer.sh"
 echo

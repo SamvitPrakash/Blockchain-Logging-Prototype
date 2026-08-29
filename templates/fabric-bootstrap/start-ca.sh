@@ -23,7 +23,7 @@ echo "Container       : ${CA_NAME}"
 echo "Image           : ${CA_IMAGE}"
 echo "XIT             : ${XIT_NETWORK}"
 echo "IP              : ${CA_IP}"
-echo "VNFM state      : ${CA_STATE_DIR}"
+echo "FABRIC-BOOTSTRAP state      : ${CA_STATE_DIR}"
 echo "Host data       : ${HOST_CA_DATA_DIR}"
 echo
 

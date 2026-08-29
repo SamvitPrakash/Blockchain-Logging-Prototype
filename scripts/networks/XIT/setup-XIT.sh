@@ -43,7 +43,7 @@ echo " XIT address allocation"
 echo "=============================================="
 echo
 echo "Gateway       : ${GATEWAY}"
-echo "VNFM          : 10.10.0.10"
+echo "FABRIC-BOOTSTRAP          : 10.10.0.10"
 echo "CA            : 10.10.0.11"
 echo "Orderer base  : 10.10.0.20"
 echo "Peer base     : 10.10.0.100"

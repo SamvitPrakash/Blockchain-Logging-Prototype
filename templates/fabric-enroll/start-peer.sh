@@ -25,12 +25,12 @@ echo "Peer            : ${PEER_NAME}"
 echo "Hostname        : ${PEER_HOSTNAME}"
 echo "Peer IP         : ${PEER_IP}"
 echo "XIT             : ${XIT_NETWORK}"
-echo "VNF state       : ${PEER_STATE_DIR}"
+echo "FABRIC-ENROLL state       : ${PEER_STATE_DIR}"
 echo "Host peer state : ${HOST_PEER_STATE_DIR}"
 echo
 
 # ============================================================
-# Validate VNF-side peer state
+# Validate FABRIC-ENROLL-side peer state
 # ============================================================
 
 if [ ! -d "${PEER_STATE_DIR}" ]; then
@@ -84,7 +84,7 @@ if [ ! -f "${MSP_DIR}/config.yaml" ]; then
 fi
 
 # ============================================================
-# Validate VNF-side TLS state
+# Validate FABRIC-ENROLL-side TLS state
 # ============================================================
 
 if [ ! -d "${TLS_DIR}" ]; then

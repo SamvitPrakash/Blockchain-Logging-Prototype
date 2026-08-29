@@ -43,4 +43,4 @@ echo
 echo "Network : ${NETWORK_NAME}"
 echo "Subnet  : ${SUBNET}"
 echo "gNB IP  : 10.20.${INSTANCE}.2"
-echo "VNF IP  : 10.20.${INSTANCE}.3"
+echo "FABRIC-ENROLL IP  : 10.20.${INSTANCE}.3"

@@ -3,7 +3,7 @@
 set -eu
 
 # ============================================================
-# VNF nested Fabric peer enrollment
+# FABRIC-ENROLL nested Fabric peer enrollment
 # ============================================================
 
 : "${VNF_INSTANCE:?VNF_INSTANCE is required}"
@@ -133,7 +133,7 @@ EOF
 # ------------------------------------------------------------
 # Ownership
 #
-# The VNF container runs as root, but the generated state is
+# The FABRIC-ENROLL container runs as root, but the generated state is
 # intended to be consumed from the host. HOST_UID/HOST_GID are
 # supplied by compose.yaml.
 # ------------------------------------------------------------

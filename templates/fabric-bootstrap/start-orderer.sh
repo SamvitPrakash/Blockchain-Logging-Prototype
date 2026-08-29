@@ -42,7 +42,7 @@ echo "Image           : ${ORDERER_IMAGE}"
 echo "XIT             : ${XIT_NETWORK}"
 echo "IP              : ${ORDERER_IP}"
 echo "CA              : ${CA_NAME}:${CA_PORT}"
-echo "VNFM state      : ${ORDERER_STATE_DIR}"
+echo "FABRIC-BOOTSTRAP state      : ${ORDERER_STATE_DIR}"
 echo "Host data       : ${HOST_ORDERER_DATA_DIR}"
 echo
 
