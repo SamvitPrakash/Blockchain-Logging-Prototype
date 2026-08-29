@@ -154,6 +154,12 @@ peer:
       FileKeyStore:
         KeyStore: /etc/hyperledger/fabric/msp/keystore
 
+vm:
+  endpoint: unix:///var/run/docker.sock
+
+chaincode:
+  mode: net
+
 operations:
   listenAddress: 0.0.0.0:9443
   tls:
@@ -175,15 +181,6 @@ fi
 
 # ============================================================
 # Start nested Fabric peer
-#
-# Docker is using the HOST daemon through:
-#
-#   /var/run/docker.sock
-#
-# Therefore HOST_PEER_STATE_DIR is intentionally passed
-# directly to Docker as a host-side bind source.
-#
-# The VNF itself must NOT attempt to access that path.
 # ============================================================
 
 echo "Starting Fabric peer..."
@@ -196,6 +193,7 @@ docker run \
     --ip "${PEER_IP}" \
     -v "${HOST_PEER_STATE_DIR}:/etc/hyperledger/fabric:rw" \
     -v "${HOST_PEER_STATE_DIR}/production:/var/hyperledger/production:rw" \
+    -v /var/run/docker.sock:/var/run/docker.sock \
     -e FABRIC_CFG_PATH=/etc/hyperledger/fabric \
     -e CORE_PEER_ID="${PEER_NAME}" \
     -e CORE_PEER_ADDRESS="${PEER_HOSTNAME}:7051" \
