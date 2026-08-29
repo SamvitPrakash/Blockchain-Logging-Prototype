@@ -10,95 +10,71 @@ set -e
 : "${HOST_ORDERER_DATA_DIR:?HOST_ORDERER_DATA_DIR is required}"
 
 ORDERER_NAME="fabric-orderer-1"
+ORDERER_IMAGE="hyperledger/fabric-orderer:2.5.16"
 
 CA_NAME="fabric-ca"
+CA_IMAGE="hyperledger/fabric-ca:1.5.17"
 CA_PORT="7054"
-CA_URL="http://${CA_NAME}:${CA_PORT}"
-CA_MSP_ID="ca"
 
-CA_CLIENT_IMAGE="hyperledger/fabric-ca:1.5.17"
-ORDERER_IMAGE="hyperledger/fabric-orderer:2.5.16"
+ORDERER_HOME="/var/hyperledger/orderer"
+ORDERER_MSP_DIR="${ORDERER_HOME}/msp"
+ORDERER_TLS_DIR="${ORDERER_HOME}/tls"
+
+ORDERER_MSP_ID="OrdererMSP"
+
+ORDERER_PORT="7050"
+ORDERER_CLUSTER_PORT="7051"
 
 ORDERER_IDENTITY="orderer1"
 ORDERER_PASSWORD="ordererpw"
 
-CA_ADMIN_IDENTITY="admin"
-CA_ADMIN_PASSWORD="adminpw"
-
-ORDERER_HOME="/var/hyperledger/orderer"
-ORDERER_MSP="${ORDERER_HOME}/msp"
-ORDERER_LEDGER="${ORDERER_HOME}/production"
+ORDERER_TLS_IDENTITY="orderer1-tls"
+ORDERER_TLS_PASSWORD="orderertlspw"
 
 ORDERER_STATE_DIR="${VNFM_STATE_DIR}/orderer"
-
-CA_CLIENT_NAME="fabric-ca-client-orderer"
 
 echo "=============================================="
 echo " Initializing nested Fabric orderer"
 echo "=============================================="
 echo
-echo "Orderer       : ${ORDERER_NAME}"
-echo "Orderer IP    : ${ORDERER_IP}"
-echo "CA            : ${CA_NAME}:${CA_PORT}"
-echo "XIT           : ${XIT_NETWORK}"
-echo "Orderer state : ${ORDERER_STATE_DIR}"
-echo "Host state    : ${HOST_ORDERER_DATA_DIR}"
+echo "Container       : ${ORDERER_NAME}"
+echo "Image           : ${ORDERER_IMAGE}"
+echo "XIT             : ${XIT_NETWORK}"
+echo "IP              : ${ORDERER_IP}"
+echo "CA              : ${CA_NAME}:${CA_PORT}"
+echo "VNFM state      : ${ORDERER_STATE_DIR}"
+echo "Host data       : ${HOST_ORDERER_DATA_DIR}"
 echo
-
-# ------------------------------------------------------------
-# Remove old orderer/client containers
-# ------------------------------------------------------------
-
-if docker inspect "${ORDERER_NAME}" >/dev/null 2>&1; then
-    echo "Removing existing orderer container..."
-    docker rm -f "${ORDERER_NAME}" >/dev/null 2>&1 || true
-fi
-
-if docker inspect "${CA_CLIENT_NAME}" >/dev/null 2>&1; then
-    echo "Removing existing CA client container..."
-    docker rm -f "${CA_CLIENT_NAME}" >/dev/null 2>&1 || true
-fi
-
-# ------------------------------------------------------------
-# Clean orderer state
-# ------------------------------------------------------------
 
 rm -rf "${ORDERER_STATE_DIR}"
 
 mkdir -p \
-    "${ORDERER_STATE_DIR}/admin" \
     "${ORDERER_STATE_DIR}/msp" \
+    "${ORDERER_STATE_DIR}/tls" \
     "${ORDERER_STATE_DIR}/production"
 
-# ------------------------------------------------------------
-# Enroll CA administrator
-# ------------------------------------------------------------
-
-echo
 echo "----------------------------------------------"
 echo " Enrolling CA administrator"
 echo "----------------------------------------------"
 echo
 
+rm -rf "${HOST_ORDERER_DATA_DIR}/admin"
+
+mkdir -p "${HOST_ORDERER_DATA_DIR}/admin"
+
 docker run \
-    --name "${CA_CLIENT_NAME}" \
+    --rm \
+    --name "fabric-ca-client-orderer-admin" \
     --network "${XIT_NETWORK}" \
-    --hostname "${CA_CLIENT_NAME}" \
-    -e FABRIC_CA_CLIENT_HOME="/var/hyperledger/orderer/admin" \
-    -v "${HOST_ORDERER_DATA_DIR}:/var/hyperledger/orderer" \
-    "${CA_CLIENT_IMAGE}" \
+    -e FABRIC_CA_CLIENT_HOME="/tmp/fabric-ca-client" \
+    -v "${HOST_ORDERER_DATA_DIR}/admin:/tmp/fabric-ca-client" \
+    "${CA_IMAGE}" \
     fabric-ca-client enroll \
-        --caname "${CA_MSP_ID}" \
-        -u "http://${CA_ADMIN_IDENTITY}:${CA_ADMIN_PASSWORD}@${CA_NAME}:${CA_PORT}" \
-        -M "/var/hyperledger/orderer/admin/msp"
+        -u "http://admin:adminpw@${CA_NAME}:${CA_PORT}"
 
 echo
 echo "CA administrator enrolled."
 echo
-
-# ------------------------------------------------------------
-# Register orderer identity
-# ------------------------------------------------------------
 
 echo "----------------------------------------------"
 echo " Registering orderer identity"
@@ -107,27 +83,21 @@ echo
 
 docker run \
     --rm \
+    --name "fabric-ca-client-orderer-register" \
     --network "${XIT_NETWORK}" \
-    --hostname "${CA_CLIENT_NAME}" \
-    -e FABRIC_CA_CLIENT_HOME="/var/hyperledger/orderer/admin" \
-    -v "${HOST_ORDERER_DATA_DIR}:/var/hyperledger/orderer" \
-    "${CA_CLIENT_IMAGE}" \
+    -e FABRIC_CA_CLIENT_HOME="/tmp/fabric-ca-client" \
+    -v "${HOST_ORDERER_DATA_DIR}/admin:/tmp/fabric-ca-client" \
+    "${CA_IMAGE}" \
     fabric-ca-client register \
-        --caname "${CA_MSP_ID}" \
         --id.name "${ORDERER_IDENTITY}" \
         --id.secret "${ORDERER_PASSWORD}" \
         --id.type orderer \
         --id.affiliation "org1.orderer" \
-        --mspdir "/var/hyperledger/orderer/admin/msp" \
-        -u "${CA_URL}"
+        -u "http://${CA_NAME}:${CA_PORT}"
 
 echo
 echo "Orderer identity registered."
 echo
-
-# ------------------------------------------------------------
-# Enroll orderer identity
-# ------------------------------------------------------------
 
 echo "----------------------------------------------"
 echo " Enrolling orderer identity"
@@ -136,55 +106,181 @@ echo
 
 docker run \
     --rm \
+    --name "fabric-ca-client-orderer-enroll" \
     --network "${XIT_NETWORK}" \
-    --hostname "${ORDERER_NAME}" \
-    -e FABRIC_CA_CLIENT_HOME="${ORDERER_HOME}" \
+    -e FABRIC_CA_CLIENT_HOME="/tmp/fabric-ca-client" \
     -v "${HOST_ORDERER_DATA_DIR}:${ORDERER_HOME}" \
-    "${CA_CLIENT_IMAGE}" \
+    "${CA_IMAGE}" \
     fabric-ca-client enroll \
-        --caname "${CA_MSP_ID}" \
         -u "http://${ORDERER_IDENTITY}:${ORDERER_PASSWORD}@${CA_NAME}:${CA_PORT}" \
-        -M "${ORDERER_MSP}" \
-        --csr.hosts "${ORDERER_NAME},${ORDERER_IP}"
+        -M "${ORDERER_MSP_DIR}"
 
 echo
 echo "Orderer MSP generated."
 echo
 
-# ------------------------------------------------------------
-# Remove temporary client
-# ------------------------------------------------------------
+echo "----------------------------------------------"
+echo " Registering orderer TLS identity"
+echo "----------------------------------------------"
+echo
 
-docker rm -f "${CA_CLIENT_NAME}" >/dev/null 2>&1 || true
+docker run \
+    --rm \
+    --name "fabric-ca-client-orderer-tls-register" \
+    --network "${XIT_NETWORK}" \
+    -e FABRIC_CA_CLIENT_HOME="/tmp/fabric-ca-client" \
+    -v "${HOST_ORDERER_DATA_DIR}/admin:/tmp/fabric-ca-client" \
+    "${CA_IMAGE}" \
+    fabric-ca-client register \
+        --id.name "${ORDERER_TLS_IDENTITY}" \
+        --id.secret "${ORDERER_TLS_PASSWORD}" \
+        --id.type orderer \
+        --id.affiliation "org1.orderer" \
+        -u "http://${CA_NAME}:${CA_PORT}"
 
-# ------------------------------------------------------------
-# Verify MSP
-# ------------------------------------------------------------
+echo
+echo "Orderer TLS identity registered."
+echo
+
+echo "----------------------------------------------"
+echo " Enrolling orderer TLS identity"
+echo "----------------------------------------------"
+echo
+
+docker run \
+    --rm \
+    --name "fabric-ca-client-orderer-tls-enroll" \
+    --network "${XIT_NETWORK}" \
+    -e FABRIC_CA_CLIENT_HOME="/tmp/fabric-ca-client" \
+    -v "${HOST_ORDERER_DATA_DIR}:${ORDERER_HOME}" \
+    "${CA_IMAGE}" \
+    fabric-ca-client enroll \
+        -u "http://${ORDERER_TLS_IDENTITY}:${ORDERER_TLS_PASSWORD}@${CA_NAME}:${CA_PORT}" \
+        -M "${ORDERER_TLS_DIR}" \
+        --enrollment.profile tls \
+        --csr.hosts "${ORDERER_NAME},${ORDERER_IP},localhost"
+
+echo
+echo "Orderer TLS material generated."
+echo
+
+TLS_CERT=$(find "${ORDERER_STATE_DIR}/tls/signcerts" \
+    -type f \
+    -print \
+    -quit)
+
+TLS_KEY=$(find "${ORDERER_STATE_DIR}/tls/keystore" \
+    -type f \
+    -print \
+    -quit)
+
+TLS_CA=$(find "${ORDERER_STATE_DIR}/tls/tlscacerts" \
+    -type f \
+    -print \
+    -quit)
+
+if [ -z "${TLS_CERT}" ]; then
+    echo "ERROR: TLS certificate was not generated."
+    exit 1
+fi
+
+if [ -z "${TLS_KEY}" ]; then
+    echo "ERROR: TLS private key was not generated."
+    exit 1
+fi
+
+if [ -z "${TLS_CA}" ]; then
+    echo "ERROR: TLS CA certificate was not generated."
+    exit 1
+fi
+
+echo "TLS certificate : ${TLS_CERT}"
+echo "TLS private key : ${TLS_KEY}"
+echo "TLS CA          : ${TLS_CA}"
+
+cp "${TLS_CERT}" "${ORDERER_STATE_DIR}/tls/server.crt"
+cp "${TLS_KEY}" "${ORDERER_STATE_DIR}/tls/server.key"
+cp "${TLS_CA}" "${ORDERER_STATE_DIR}/tls/ca.crt"
+
+echo
+echo "TLS material normalized."
+echo
+
+echo "----------------------------------------------"
+echo " Configuring Orderer local MSP"
+echo "----------------------------------------------"
+echo
+
+cat > "${ORDERER_STATE_DIR}/msp/config.yaml" <<'EOF'
+NodeOUs:
+  Enable: true
+
+  ClientOUIdentifier:
+    OrganizationalUnitIdentifier: client
+
+  AdminOUIdentifier:
+    OrganizationalUnitIdentifier: admin
+
+  PeerOUIdentifier:
+    OrganizationalUnitIdentifier: peer
+
+  OrdererOUIdentifier:
+    OrganizationalUnitIdentifier: orderer
+EOF
+
+echo "Orderer MSP config created."
+echo
+
+mkdir -p "${ORDERER_STATE_DIR}/msp/tlscacerts"
+
+cp \
+    "${ORDERER_STATE_DIR}/tls/ca.crt" \
+    "${ORDERER_STATE_DIR}/msp/tlscacerts/ca.crt"
 
 if [ ! -f "${ORDERER_STATE_DIR}/msp/signcerts/cert.pem" ]; then
-    echo
-    echo "ERROR: Orderer enrollment did not produce a certificate."
+    echo "ERROR: Orderer sign certificate was not generated."
     exit 1
 fi
 
-if [ ! -d "${ORDERER_STATE_DIR}/msp/keystore" ]; then
-    echo
-    echo "ERROR: Orderer enrollment did not produce a keystore."
+if ! find "${ORDERER_STATE_DIR}/msp/keystore" \
+    -type f \
+    -print \
+    -quit | grep -q .
+then
+    echo "ERROR: Orderer private key was not generated."
     exit 1
 fi
 
-echo
+if [ ! -f "${ORDERER_STATE_DIR}/msp/config.yaml" ]; then
+    echo "ERROR: Orderer MSP config.yaml was not generated."
+    exit 1
+fi
+
+if [ ! -f "${ORDERER_STATE_DIR}/tls/server.crt" ]; then
+    echo "ERROR: Orderer TLS certificate was not generated."
+    exit 1
+fi
+
+if [ ! -f "${ORDERER_STATE_DIR}/tls/server.key" ]; then
+    echo "ERROR: Orderer TLS private key was not generated."
+    exit 1
+fi
+
+if [ ! -f "${ORDERER_STATE_DIR}/tls/ca.crt" ]; then
+    echo "ERROR: Orderer TLS CA certificate was not generated."
+    exit 1
+fi
+
 echo "Orderer MSP verified."
+echo "Orderer TLS verified."
 echo
 
-# ------------------------------------------------------------
-# Start orderer
-# ------------------------------------------------------------
-
 echo "----------------------------------------------"
-echo " Starting Fabric orderer"
+echo " Starting nested Fabric orderer"
 echo "----------------------------------------------"
 echo
+
+docker rm -f "${ORDERER_NAME}" >/dev/null 2>&1 || true
 
 docker run \
     -d \
@@ -194,25 +290,32 @@ docker run \
     --hostname "${ORDERER_NAME}" \
     -e FABRIC_CFG_PATH="/etc/hyperledger/fabric" \
     -e ORDERER_GENERAL_LISTENADDRESS="0.0.0.0" \
-    -e ORDERER_GENERAL_LISTENPORT="7050" \
-    -e ORDERER_GENERAL_LOCALMSPID="OrdererMSP" \
+    -e ORDERER_GENERAL_LISTENPORT="${ORDERER_PORT}" \
+    -e ORDERER_GENERAL_LOCALMSPID="${ORDERER_MSP_ID}" \
     -e ORDERER_GENERAL_LOCALMSPDIR="${ORDERER_HOME}/msp" \
     -e ORDERER_GENERAL_BOOTSTRAPMETHOD="none" \
     -e ORDERER_CHANNELPARTICIPATION_ENABLED="true" \
-    -e ORDERER_GENERAL_TLS_ENABLED="false" \
-    -e ORDERER_FILELEDGER_LOCATION="${ORDERER_LEDGER}" \
+    -e ORDERER_GENERAL_TLS_ENABLED="true" \
+    -e ORDERER_GENERAL_TLS_PRIVATEKEY="${ORDERER_HOME}/tls/server.key" \
+    -e ORDERER_GENERAL_TLS_CERTIFICATE="${ORDERER_HOME}/tls/server.crt" \
+    -e ORDERER_GENERAL_TLS_ROOTCAS="[${ORDERER_HOME}/tls/ca.crt]" \
+    -e ORDERER_GENERAL_CLUSTER_LISTENADDRESS="0.0.0.0" \
+    -e ORDERER_GENERAL_CLUSTER_LISTENPORT="${ORDERER_CLUSTER_PORT}" \
+    -e ORDERER_GENERAL_CLUSTER_SERVERCERTIFICATE="${ORDERER_HOME}/tls/server.crt" \
+    -e ORDERER_GENERAL_CLUSTER_SERVERPRIVATEKEY="${ORDERER_HOME}/tls/server.key" \
+    -e ORDERER_GENERAL_CLUSTER_ROOTCAS="[${ORDERER_HOME}/tls/ca.crt]" \
+    -e ORDERER_FILELEDGER_LOCATION="${ORDERER_HOME}/production" \
     -v "${HOST_ORDERER_DATA_DIR}:${ORDERER_HOME}" \
     "${ORDERER_IMAGE}" \
     orderer
 
 echo
-echo "Waiting for orderer to start..."
-echo
+echo "Waiting for Fabric orderer..."
 
 for i in {1..30}; do
 
     if ! docker inspect "${ORDERER_NAME}" >/dev/null 2>&1; then
-        echo "ERROR: Orderer container disappeared."
+        echo "Error: orderer container disappeared."
         exit 1
     fi
 
@@ -221,13 +324,13 @@ for i in {1..30}; do
         "${ORDERER_NAME}")
 
     if [ "${RUNNING}" = "true" ]; then
-        echo "Orderer container is running."
+        echo "Fabric orderer is running."
         break
     fi
 
     if [ "${i}" -eq 30 ]; then
         echo
-        echo "ERROR: Orderer failed to start."
+        echo "Error: Fabric orderer failed to start."
         echo
         docker logs "${ORDERER_NAME}" 2>&1 || true
         exit 1
@@ -243,6 +346,8 @@ echo "=============================================="
 echo
 echo "Container : ${ORDERER_NAME}"
 echo "IP        : ${ORDERER_IP}"
-echo "Port      : 7050"
-echo "MSP       : OrdererMSP"
+echo "Port      : ${ORDERER_PORT}"
+echo "Cluster   : ${ORDERER_CLUSTER_PORT}"
+echo "MSP ID    : ${ORDERER_MSP_ID}"
+echo "TLS       : enabled"
 echo
