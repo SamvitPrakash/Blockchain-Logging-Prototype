@@ -151,6 +151,14 @@ services:
   # Fabric orderer
   #
   # Starts only after bootstrap exits successfully.
+  #
+  # Architecture:
+  #
+  #   7050  Fabric orderer endpoint
+  #   7051  Raft cluster endpoint
+  #   9443  Admin / channel participation endpoint
+  #
+  # There is intentionally only ONE orderer.
   # ==========================================================
 
   ${ORDERER_NAME}:
@@ -164,22 +172,52 @@ services:
         condition: service_completed_successfully
 
     environment:
+
+      # --------------------------------------------------------
+      # Fabric configuration
+      # --------------------------------------------------------
+
       FABRIC_CFG_PATH: "/etc/hyperledger/fabric"
+
+      # --------------------------------------------------------
+      # General orderer listener
+      # --------------------------------------------------------
 
       ORDERER_GENERAL_LISTENADDRESS: "0.0.0.0"
       ORDERER_GENERAL_LISTENPORT: "7050"
 
+      # --------------------------------------------------------
+      # Orderer identity
+      # --------------------------------------------------------
+
       ORDERER_GENERAL_LOCALMSPID: "OrdererMSP"
       ORDERER_GENERAL_LOCALMSPDIR: "/var/hyperledger/orderer/msp"
 
-      ORDERER_GENERAL_BOOTSTRAPMETHOD: "none"
+      # --------------------------------------------------------
+      # Channel participation architecture
+      #
+      # No system channel is used.
+      # Channels are joined through the participation API.
+      # --------------------------------------------------------
 
+      ORDERER_GENERAL_BOOTSTRAPMETHOD: "none"
       ORDERER_CHANNELPARTICIPATION_ENABLED: "true"
 
+      # --------------------------------------------------------
+      # General TLS
+      # --------------------------------------------------------
+
       ORDERER_GENERAL_TLS_ENABLED: "true"
+
       ORDERER_GENERAL_TLS_PRIVATEKEY: "/var/hyperledger/orderer/tls/server.key"
       ORDERER_GENERAL_TLS_CERTIFICATE: "/var/hyperledger/orderer/tls/server.crt"
       ORDERER_GENERAL_TLS_ROOTCAS: "[/var/hyperledger/orderer/tls/ca.crt]"
+
+      # --------------------------------------------------------
+      # Raft cluster listener
+      #
+      # Kept separate from the admin API.
+      # --------------------------------------------------------
 
       ORDERER_GENERAL_CLUSTER_LISTENADDRESS: "0.0.0.0"
       ORDERER_GENERAL_CLUSTER_LISTENPORT: "7051"
@@ -187,6 +225,30 @@ services:
       ORDERER_GENERAL_CLUSTER_SERVERCERTIFICATE: "/var/hyperledger/orderer/tls/server.crt"
       ORDERER_GENERAL_CLUSTER_SERVERPRIVATEKEY: "/var/hyperledger/orderer/tls/server.key"
       ORDERER_GENERAL_CLUSTER_ROOTCAS: "[/var/hyperledger/orderer/tls/ca.crt]"
+
+      # --------------------------------------------------------
+      # Orderer Admin / Channel Participation API
+      #
+      # Fabric's channel participation API uses the Admin
+      # listener.
+      #
+      # The listener must be reachable from the XIT network.
+      # --------------------------------------------------------
+
+      ORDERER_ADMIN_LISTENADDRESS: "0.0.0.0:9443"
+
+      ORDERER_ADMIN_TLS_ENABLED: "true"
+
+      ORDERER_ADMIN_TLS_CERTIFICATE: "/var/hyperledger/orderer/tls/server.crt"
+      ORDERER_ADMIN_TLS_PRIVATEKEY: "/var/hyperledger/orderer/tls/server.key"
+
+      ORDERER_ADMIN_TLS_CLIENTAUTHREQUIRED: "true"
+
+      ORDERER_ADMIN_TLS_CLIENTROOTCAS: "[/var/hyperledger/orderer/tls/ca.crt]"
+
+      # --------------------------------------------------------
+      # Ledger storage
+      # --------------------------------------------------------
 
       ORDERER_FILELEDGER_LOCATION: "/var/hyperledger/orderer/production"
 
@@ -252,6 +314,12 @@ echo "Fabric orderer:"
 echo "  Name       : ${ORDERER_NAME}"
 echo "  IP         : ${ORDERER_IP}"
 echo "  Host data  : ${ORDERER_HOST_DATA_DIR}"
+echo
+
+echo "Orderer endpoints:"
+echo "  Fabric      : 7050"
+echo "  Cluster     : 7051"
+echo "  Admin API   : 9443"
 echo
 
 echo "Compose:"
