@@ -37,9 +37,6 @@ VNF_NAME="fabric-enroll-${INSTANCE}"
 VNF_CONTAINER="fabric-enroll-${INSTANCE}"
 PEER_NAME="fabric-peer-${INSTANCE}"
 
-OAM_NETWORK="OAM-${INSTANCE}"
-OAM_IP="10.20.${INSTANCE}.3"
-
 XIT_NETWORK="XIT"
 VNF_XIT_IP="10.10.0.$((50 + INSTANCE))"
 PEER_IP="10.10.0.$((100 + INSTANCE))"
@@ -87,16 +84,6 @@ fi
 
 if docker inspect "$PEER_NAME" >/dev/null 2>&1; then
     echo "Error: Fabric peer container '${PEER_NAME}' already exists."
-    exit 1
-fi
-
-if ! docker network inspect "$OAM_NETWORK" >/dev/null 2>&1; then
-    echo "Error: OAM network '${OAM_NETWORK}' does not exist."
-    echo
-    echo "Create it first with:"
-    echo
-    echo "  ./scripts/networks/OAM/create-oam-network.sh ${INSTANCE}"
-    echo
     exit 1
 fi
 
@@ -162,9 +149,6 @@ services:
       VNF_STATE_DIR: "/opt/fabric-enroll-state"
       VNF_NAME: "${VNF_NAME}"
 
-      OAM_NETWORK: "${OAM_NETWORK}"
-      OAM_IP: "${OAM_IP}"
-
       XIT_NETWORK: "${XIT_NETWORK}"
 
       PEER_NAME: "${PEER_NAME}"
@@ -183,8 +167,6 @@ services:
       - ${BUILD_DIR}:/opt/fabric-enroll-state
 
     networks:
-      oam:
-        ipv4_address: ${OAM_IP}
 
       xit:
         ipv4_address: ${VNF_XIT_IP}
@@ -236,10 +218,6 @@ services:
     restart: unless-stopped
 
 networks:
-
-  oam:
-    external: true
-    name: ${OAM_NETWORK}
 
   xit:
     external: true
@@ -325,8 +303,6 @@ echo
 echo "FABRIC-ENROLL:"
 echo "  Name       : ${VNF_NAME}"
 echo "  Container  : ${VNF_CONTAINER}"
-echo "  OAM        : ${OAM_NETWORK}"
-echo "  OAM IP     : ${OAM_IP}"
 echo "  XIT IP     : ${VNF_XIT_IP}"
 echo
 echo "Fabric peer:"

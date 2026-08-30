@@ -9,8 +9,6 @@ echo "=============================================="
 echo
 echo "FABRIC-ENROLL instance : ${VNF_INSTANCE}"
 echo "FABRIC-ENROLL name     : ${VNF_NAME}"
-echo "OAM network            : ${OAM_NETWORK}"
-echo "OAM address            : ${OAM_IP}"
 echo "XIT network            : ${XIT_NETWORK}"
 echo "Peer address           : ${PEER_IP}"
 echo
