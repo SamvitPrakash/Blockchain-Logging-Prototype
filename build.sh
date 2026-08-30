@@ -44,6 +44,8 @@ docker compose -f build/fabric-enroll-10/compose.yaml up -d
 
 ./scripts/fabric-network/create.sh 10 3 12345
 
+# ./scripts/fabric-network/join-peers.sh
+
 ./scripts/vnfm/create.sh
 
 docker compose -f build/vnfm/compose.yaml up -d

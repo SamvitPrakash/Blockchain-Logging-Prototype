@@ -137,6 +137,12 @@ vm:
 chaincode:
   mode: net
 
+  system:
+    _lifecycle: enable
+    cscc: enable
+    lscc: enable
+    qscc: enable
+
 operations:
   listenAddress: 0.0.0.0:9443
   tls:
