@@ -1,30 +1,9 @@
 #!/bin/bash
 
-set -euo pipefail
+set -e
 
 # ============================================================
-# FABRIC-NETWORK Generator
-#
-# Generates:
-#   1. Deterministic peer -> channel assignments
-#   2. Fabric configtx.yaml
-#   3. Fabric channel blocks
-#
-# Fabric tooling runs inside:
-#   hyperledger/fabric-tools:2.5.16
-#
-# Architecture:
-#   - ONE Fabric orderer
-#   - Every peer belongs to exactly ONE channel
-#   - Every channel contains >= 2 peers
-#   - Channel sizes differ by at most one peer
-#   - Peer assignment is deterministic for a given seed
-#
-# Usage:
-#   ./scripts/fabric-network/create.sh <peers> <ledgers> [seed]
-#
-# Example:
-#   ./scripts/fabric-network/create.sh 10 3 12345
+# Fabric Network Generator
 # ============================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -33,136 +12,85 @@ PROJECT_ROOT="$(realpath "$SCRIPT_DIR/../..")"
 BUILD_DIR="$PROJECT_ROOT/build/fabric-network"
 CHANNEL_DIR="$BUILD_DIR/channels"
 
-DEFAULT_SEED="12345"
-
-FABRIC_TOOLS_IMAGE="${FABRIC_TOOLS_IMAGE:-hyperledger/fabric-tools:2.5.16}"
-
-# Container-side project path.
 CONTAINER_PROJECT_ROOT="/fabric-project"
+CONTAINER_BUILD_DIR="$CONTAINER_PROJECT_ROOT/build/fabric-network"
 
-CONTAINER_BUILD_DIR="${CONTAINER_PROJECT_ROOT}/build/fabric-network"
+FABRIC_TOOLS_IMAGE="hyperledger/fabric-tools:2.5.16"
+
+PEER_COUNT="${1:-}"
+LEDGER_COUNT="${2:-}"
+SEED="${3:-}"
 
 # ============================================================
-# Arguments
+# Validate arguments
 # ============================================================
 
-if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
+if [ -z "$PEER_COUNT" ] || [ -z "$LEDGER_COUNT" ] || [ -z "$SEED" ]; then
+    echo
     echo "Usage:"
-    echo "  $0 <number-of-peers> <number-of-ledgers> [seed]"
+    echo "  $0 <peer-count> <ledger-count> <seed>"
     echo
-    echo "Example:"
-    echo "  $0 10 3 12345"
     exit 1
 fi
 
-PEER_COUNT="$1"
-LEDGER_COUNT="$2"
-SEED="${3:-$DEFAULT_SEED}"
-
-# ============================================================
-# Validation
-# ============================================================
-
-if ! [[ "$PEER_COUNT" =~ ^[0-9]+$ ]] || [ "$PEER_COUNT" -lt 2 ]; then
-    echo "Error: number of peers must be an integer >= 2."
+if ! [[ "$PEER_COUNT" =~ ^[0-9]+$ ]]; then
+    echo "Error: peer count must be an integer."
     exit 1
 fi
 
-if ! [[ "$LEDGER_COUNT" =~ ^[0-9]+$ ]] || [ "$LEDGER_COUNT" -lt 1 ]; then
-    echo "Error: number of ledgers must be an integer >= 1."
+if ! [[ "$LEDGER_COUNT" =~ ^[0-9]+$ ]]; then
+    echo "Error: ledger count must be an integer."
     exit 1
 fi
 
-if ! [[ "$SEED" =~ ^[0-9]+$ ]]; then
-    echo "Error: seed must be a non-negative integer."
+if [ "$PEER_COUNT" -lt 1 ]; then
+    echo "Error: peer count must be at least 1."
     exit 1
 fi
 
-MAX_LEDGER_COUNT=$((PEER_COUNT / 2))
+if [ "$LEDGER_COUNT" -lt 1 ]; then
+    echo "Error: ledger count must be at least 1."
+    exit 1
+fi
 
-if [ "$LEDGER_COUNT" -gt "$MAX_LEDGER_COUNT" ]; then
-    echo "Error: ${LEDGER_COUNT} ledgers cannot be created from ${PEER_COUNT} peers."
-    echo
-    echo "Each ledger must contain at least two unique peers."
-    echo "Maximum valid ledger count: ${MAX_LEDGER_COUNT}"
+if [ "$PEER_COUNT" -lt "$((LEDGER_COUNT * 2))" ]; then
+    echo "Error: every channel must contain at least two peers."
+    echo "Peers : $PEER_COUNT"
+    echo "Ledgers: $LEDGER_COUNT"
     exit 1
 fi
 
 # ============================================================
-# Docker
+# Prepare build directory
 # ============================================================
 
-if ! command -v docker >/dev/null 2>&1; then
-    echo "Error: docker command was not found."
-    exit 1
-fi
+rm -rf "$BUILD_DIR"
+
+mkdir -p "$BUILD_DIR"
+mkdir -p "$CHANNEL_DIR"
+
+# ============================================================
+# Fabric tooling
+# ============================================================
 
 echo
 echo "Fabric tooling:"
-echo "  ${FABRIC_TOOLS_IMAGE}"
+echo "  $FABRIC_TOOLS_IMAGE"
 echo
 
 if ! docker image inspect "$FABRIC_TOOLS_IMAGE" >/dev/null 2>&1; then
     echo "Fabric tools image is not present locally."
     echo
     echo "Pulling:"
-    echo "  ${FABRIC_TOOLS_IMAGE}"
+    echo "  $FABRIC_TOOLS_IMAGE"
     echo
 
     docker pull "$FABRIC_TOOLS_IMAGE"
+    echo
 fi
 
 # ============================================================
-# Existing Fabric identity material
-# ============================================================
-
-ORDERER_MSP_DIR="$PROJECT_ROOT/build/fabric-bootstrap/orderer/msp"
-ORDERER_TLS_DIR="$PROJECT_ROOT/build/fabric-bootstrap/orderer/tls"
-REFERENCE_PEER_MSP_DIR="$PROJECT_ROOT/build/fabric-enroll-1/peer/msp"
-
-if [ ! -d "$ORDERER_MSP_DIR" ]; then
-    echo "Error: orderer MSP does not exist:"
-    echo "  $ORDERER_MSP_DIR"
-    echo
-    echo "Run the existing Fabric orderer bootstrap first."
-    exit 1
-fi
-
-if [ ! -d "$ORDERER_TLS_DIR" ]; then
-    echo "Error: orderer TLS directory does not exist:"
-    echo "  $ORDERER_TLS_DIR"
-    echo
-    echo "Run the existing Fabric orderer bootstrap first."
-    exit 1
-fi
-
-if [ ! -d "$REFERENCE_PEER_MSP_DIR" ]; then
-    echo "Error: peer-1 MSP does not exist:"
-    echo "  $REFERENCE_PEER_MSP_DIR"
-    echo
-    echo "Run the existing peer enrollment first."
-    exit 1
-fi
-
-# ============================================================
-# Clean build directory
-# ============================================================
-
-if [ -d "$BUILD_DIR" ]; then
-    echo "Error: build directory already exists:"
-    echo "  $BUILD_DIR"
-    echo
-    echo "Remove it before regenerating:"
-    echo
-    echo "  rm -rf ${BUILD_DIR}"
-    echo
-    exit 1
-fi
-
-mkdir -p "$CHANNEL_DIR"
-
-# ============================================================
-# Generate deterministic topology
+# Generate topology
 # ============================================================
 
 TOPOLOGY_FILE="$BUILD_DIR/topology.json"
@@ -180,10 +108,6 @@ output_file = Path(sys.argv[4])
 
 # ------------------------------------------------------------
 # Balanced channel sizes.
-#
-# Example:
-#   10 peers / 3 channels
-#   -> 4, 3, 3
 # ------------------------------------------------------------
 
 base_size = peer_count // ledger_count
@@ -212,11 +136,9 @@ rng.shuffle(peers)
 # ------------------------------------------------------------
 
 assignments = {}
-
 offset = 0
 
 for ledger_index, ledger_size in enumerate(ledger_sizes, start=1):
-
     channel_name = f"channel-{ledger_index}"
 
     assignments[channel_name] = peers[
@@ -268,7 +190,6 @@ if max(sizes) - min(sizes) > 1:
 peer_to_channel = {}
 
 for channel_name, channel_peers in assignments.items():
-
     for peer_name in channel_peers:
         peer_to_channel[peer_name] = channel_name
 
@@ -317,57 +238,48 @@ CONFIGTX_FILE="$BUILD_DIR/configtx.yaml"
 
 cat > "$CONFIGTX_FILE" <<EOF
 ---
+
 Organizations:
 
-  - &OrdererOrg
+- &OrdererOrg
+  Name: OrdererMSP
+  ID: OrdererMSP
+  MSPDir: ${CONTAINER_PROJECT_ROOT}/build/fabric-bootstrap/orderer/msp
 
-    Name: OrdererMSP
+  Policies:
+    Readers:
+      Type: Signature
+      Rule: "OR('OrdererMSP.member')"
 
-    ID: OrdererMSP
+    Writers:
+      Type: Signature
+      Rule: "OR('OrdererMSP.member')"
 
-    MSPDir: ${CONTAINER_PROJECT_ROOT}/build/fabric-bootstrap/orderer/msp
+    Admins:
+      Type: Signature
+      Rule: "OR('OrdererMSP.admin')"
 
-    Policies:
+- &Org1
+  Name: Org1MSP
+  ID: Org1MSP
+  MSPDir: ${CONTAINER_PROJECT_ROOT}/build/fabric-enroll-1/peer/msp
 
-      Readers:
-        Type: Signature
-        Rule: "OR('OrdererMSP.member')"
+  Policies:
+    Readers:
+      Type: Signature
+      Rule: "OR('Org1MSP.member')"
 
-      Writers:
-        Type: Signature
-        Rule: "OR('OrdererMSP.member')"
+    Writers:
+      Type: Signature
+      Rule: "OR('Org1MSP.member')"
 
-      Admins:
-        Type: Signature
-        Rule: "OR('OrdererMSP.admin')"
+    Admins:
+      Type: Signature
+      Rule: "OR('Org1MSP.admin')"
 
-
-  - &Org1
-
-    Name: Org1MSP
-
-    ID: Org1MSP
-
-    MSPDir: ${CONTAINER_PROJECT_ROOT}/build/fabric-enroll-1/peer/msp
-
-    Policies:
-
-      Readers:
-        Type: Signature
-        Rule: "OR('Org1MSP.member')"
-
-      Writers:
-        Type: Signature
-        Rule: "OR('Org1MSP.member')"
-
-      Admins:
-        Type: Signature
-        Rule: "OR('Org1MSP.admin')"
-
-      Endorsement:
-        Type: Signature
-        Rule: "OR('Org1MSP.peer')"
-
+    Endorsement:
+      Type: Signature
+      Rule: "OR('Org1MSP.peer')"
 
 Capabilities:
 
@@ -379,7 +291,6 @@ Capabilities:
 
   Application: &ApplicationCapabilities
     V2_5: true
-
 
 Application: &ApplicationDefaults
 
@@ -410,7 +321,6 @@ Application: &ApplicationDefaults
   Capabilities:
     <<: *ApplicationCapabilities
 
-
 Orderer: &OrdererDefaults
 
   OrdererType: etcdraft
@@ -430,7 +340,6 @@ Orderer: &OrdererDefaults
   BatchTimeout: 2s
 
   BatchSize:
-
     MaxMessageCount: 10
     AbsoluteMaxBytes: 99 MB
     PreferredMaxBytes: 2 MB
@@ -458,7 +367,6 @@ Orderer: &OrdererDefaults
   Capabilities:
     <<: *OrdererCapabilities
 
-
 Channel: &ChannelDefaults
 
   Policies:
@@ -478,9 +386,7 @@ Channel: &ChannelDefaults
   Capabilities:
     <<: *ChannelCapabilities
 
-
 Profiles:
-
 EOF
 
 # ============================================================
@@ -492,24 +398,22 @@ for CHANNEL_NUMBER in $(seq 1 "$LEDGER_COUNT"); do
     CHANNEL_NAME="channel-${CHANNEL_NUMBER}"
 
     cat >> "$CONFIGTX_FILE" <<EOF
+
   ${CHANNEL_NAME}:
 
     <<: *ChannelDefaults
 
     Orderer:
-
       <<: *OrdererDefaults
 
       Organizations:
         - *OrdererOrg
 
     Application:
-
       <<: *ApplicationDefaults
 
       Organizations:
         - *Org1
-
 EOF
 
 done
@@ -517,7 +421,6 @@ done
 # ============================================================
 # Generate channel blocks.
 #
-# IMPORTANT:
 # FABRIC_CFG_PATH explicitly points configtxgen at the
 # directory containing configtx.yaml.
 # ============================================================
@@ -547,6 +450,7 @@ for CHANNEL_NUMBER in $(seq 1 "$LEDGER_COUNT"); do
         -outputBlock "${CONTAINER_BUILD_DIR}/channels/${CHANNEL_NAME}/channel.block"
 
     echo "  OK: $CHANNEL_OUTPUT_DIR/channel.block"
+
 done
 
 # ============================================================
@@ -563,14 +467,13 @@ for CHANNEL_NUMBER in $(seq 1 "$LEDGER_COUNT"); do
     CHANNEL_BLOCK="$CHANNEL_DIR/$CHANNEL_NAME/channel.block"
 
     if [ ! -s "$CHANNEL_BLOCK" ]; then
-
         echo "Error: generated channel block is empty:"
         echo "  $CHANNEL_BLOCK"
-
         exit 1
     fi
 
     echo "  ${CHANNEL_NAME}: OK"
+
 done
 
 # ============================================================
@@ -609,7 +512,6 @@ with open(sys.argv[1], "r", encoding="utf-8") as f:
     topology = json.load(f)
 
 for channel_name, peers in topology["channels"].items():
-
     print(f"  {channel_name} ({len(peers)} peers)")
 
     for peer in peers:
@@ -623,5 +525,20 @@ echo "  ${TOPOLOGY_FILE}"
 echo "  ${CONFIGTX_FILE}"
 echo "  ${CHANNEL_DIR}/"
 
+# ============================================================
+# VNFM handoff.
+#
+# The network generator only creates Fabric-network artifacts.
+# VNFM consumes topology.json and performs runtime management.
+#
+# The VNFM compose/project is generated separately and is not
+# started here. The fabric-bootstrap lifecycle is responsible
+# for bringing VNFM online once the Fabric bootstrap phase has
+# completed.
+# ============================================================
+
 echo
 echo "=============================================="
+echo " FABRIC-NETWORK generation complete"
+echo "=============================================="
+echo

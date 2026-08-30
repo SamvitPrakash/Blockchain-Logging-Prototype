@@ -1,4 +1,4 @@
-docker rm -f fabric-bootstrap fabric-ca fabric-orderer-1
+docker rm -f fabric-bootstrap fabric-ca fabric-orderer-1 vnfm
 docker rm -f fabric-enroll-1 fabric-peer-1
 docker rm -f fabric-enroll-2 fabric-peer-2
 docker rm -f fabric-enroll-3 fabric-peer-3
@@ -43,3 +43,7 @@ docker compose -f build/fabric-enroll-9/compose.yaml up -d
 docker compose -f build/fabric-enroll-10/compose.yaml up -d
 
 ./scripts/fabric-network/create.sh 10 3 12345
+
+./scripts/vnfm/create.sh
+
+docker compose -f build/vnfm/compose.yaml up -d
