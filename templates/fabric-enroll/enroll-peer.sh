@@ -11,7 +11,9 @@ set -eu
 
 PEER_NAME="${PEER_NAME:-fabric-peer-${VNF_INSTANCE}}"
 PEER_SECRET="${PEER_SECRET:-peerpw}"
+
 CA_IP="${CA_IP:-10.10.0.11}"
+
 PEER_IP="${PEER_IP:-10.10.0.$((100 + VNF_INSTANCE))}"
 PEER_HOSTNAME="${PEER_HOSTNAME:-${PEER_NAME}}"
 
@@ -19,6 +21,9 @@ PEER_STATE_DIR="${PEER_STATE_DIR:-${VNF_STATE_DIR}/peer}"
 
 CA_ADMIN="${CA_ADMIN:-admin}"
 CA_ADMIN_SECRET="${CA_ADMIN_SECRET:-adminpw}"
+
+ADMIN_NAME="${ADMIN_NAME:-org1-admin}"
+ADMIN_SECRET="${ADMIN_SECRET:-org1adminpw}"
 
 CA_URL="http://${CA_IP}:7054"
 
@@ -28,14 +33,22 @@ TLS_DIR="${PEER_STATE_DIR}/tls"
 ADMIN_MSP_DIR="${PEER_STATE_DIR}/admin-msp"
 
 echo "=============================================="
-echo " Enrolling Fabric peer"
+echo " Enrolling Fabric peer identities"
 echo "=============================================="
 echo
-echo "Peer       : ${PEER_NAME}"
-echo "Hostname   : ${PEER_HOSTNAME}"
-echo "IP         : ${PEER_IP}"
-echo "CA         : ${CA_URL}"
-echo "State      : ${PEER_STATE_DIR}"
+echo "Peer:"
+echo "  Name       : ${PEER_NAME}"
+echo "  Hostname   : ${PEER_HOSTNAME}"
+echo "  IP         : ${PEER_IP}"
+echo
+echo "Org admin:"
+echo "  Name       : ${ADMIN_NAME}"
+echo
+echo "CA:"
+echo "  ${CA_URL}"
+echo
+echo "State:"
+echo "  ${PEER_STATE_DIR}"
 echo
 
 mkdir -p "${PEER_STATE_DIR}"
@@ -68,6 +81,7 @@ fabric-ca-client enroll \
 # Enroll peer TLS
 # ------------------------------------------------------------
 
+echo
 echo "Enrolling peer TLS identity..."
 
 fabric-ca-client enroll \
@@ -82,9 +96,23 @@ fabric-ca-client enroll \
 # Fabric TLS layout
 # ------------------------------------------------------------
 
-TLS_CERT="$(find "${TLS_DIR}/signcerts" -type f -name '*.pem' -print -quit)"
-TLS_KEY="$(find "${TLS_DIR}/keystore" -type f -name '*_sk' -print -quit)"
-TLS_CA="$(find "${TLS_DIR}/tlscacerts" -type f -name '*.pem' -print -quit)"
+TLS_CERT="$(find "${TLS_DIR}/signcerts" \
+    -type f \
+    -name '*.pem' \
+    -print \
+    -quit)"
+
+TLS_KEY="$(find "${TLS_DIR}/keystore" \
+    -type f \
+    -name '*_sk' \
+    -print \
+    -quit)"
+
+TLS_CA="$(find "${TLS_DIR}/tlscacerts" \
+    -type f \
+    -name '*.pem' \
+    -print \
+    -quit)"
 
 [ -n "${TLS_CERT}" ] || {
     echo "Error: TLS certificate was not generated."
@@ -103,13 +131,17 @@ TLS_CA="$(find "${TLS_DIR}/tlscacerts" -type f -name '*.pem' -print -quit)"
 
 cp "${TLS_CERT}" "${TLS_DIR}/server.crt"
 cp "${TLS_KEY}"  "${TLS_DIR}/server.key"
-cp "${TLS_CA}"  "${TLS_DIR}/ca.crt"
+cp "${TLS_CA}"   "${TLS_DIR}/ca.crt"
 
 # ------------------------------------------------------------
-# MSP Node OU configuration
+# Peer MSP Node OU configuration
 # ------------------------------------------------------------
 
-CA_CERT="$(find "${MSP_DIR}/cacerts" -type f -name '*.pem' -print -quit)"
+CA_CERT="$(find "${MSP_DIR}/cacerts" \
+    -type f \
+    -name '*.pem' \
+    -print \
+    -quit)"
 
 [ -n "${CA_CERT}" ] || {
     echo "Error: MSP CA certificate was not generated."
@@ -140,30 +172,30 @@ EOF
 # ------------------------------------------------------------
 # Enroll Org1 admin MSP
 #
-# This identity is NOT used by the peer daemon.
-# It exists for administrative Fabric CLI operations such as:
-#
-#   peer channel join
-#   peer channel list
-#
-# The CA bootstrap admin is enrolled into a separate MSP.
+# IMPORTANT:
+# This MUST use the registered org1-admin identity.
+# The CA bootstrap admin is a CA administrator, not the
+# organization administrator used by Fabric channel policies.
 # ------------------------------------------------------------
 
+echo
 echo "Enrolling Org1 admin MSP..."
 
 ADMIN_CLIENT_HOME="${CLIENT_HOME}/org1-admin"
 
-rm -rf "${ADMIN_CLIENT_HOME}"
-
 mkdir -p "${ADMIN_CLIENT_HOME}"
 
 fabric-ca-client enroll \
-    -u "http://${CA_ADMIN}:${CA_ADMIN_SECRET}@${CA_IP}:7054" \
+    -u "http://${ADMIN_NAME}:${ADMIN_SECRET}@${CA_IP}:7054" \
     --home "${ADMIN_CLIENT_HOME}" \
     -M "${ADMIN_MSP_DIR}" \
-    --csr.cn "org1-admin"
+    --csr.cn "${ADMIN_NAME}"
 
-ADMIN_CA_CERT="$(find "${ADMIN_MSP_DIR}/cacerts" -type f -name '*.pem' -print -quit)"
+ADMIN_CA_CERT="$(find "${ADMIN_MSP_DIR}/cacerts" \
+    -type f \
+    -name '*.pem' \
+    -print \
+    -quit)"
 
 [ -n "${ADMIN_CA_CERT}" ] || {
     echo "Error: Org1 admin CA certificate was not generated."
@@ -219,3 +251,4 @@ echo
 echo "=============================================="
 echo " Enrollment complete"
 echo "=============================================="
+echo

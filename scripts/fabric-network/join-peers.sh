@@ -15,7 +15,6 @@ TOPOLOGY_FILE="$BUILD_DIR/topology.json"
 CHANNEL_DIR="$BUILD_DIR/channels"
 
 FABRIC_TOOLS_IMAGE="hyperledger/fabric-tools:2.5.16"
-
 XIT_NETWORK="XIT"
 
 # ============================================================
@@ -143,7 +142,29 @@ for assignment in "${ASSIGNMENTS[@]}"; do
     fi
 
     # --------------------------------------------------------
-    # Copy channel block into peer container
+    # Validate admin MSP exists
+    # --------------------------------------------------------
+
+    ADMIN_MSP="/etc/hyperledger/fabric/admin-msp"
+
+    if ! docker exec "$PEER_NAME" test -f \
+        "${ADMIN_MSP}/signcerts/cert.pem"
+    then
+        echo "ERROR: Org1 admin certificate is missing:"
+        echo "  ${ADMIN_MSP}/signcerts/cert.pem"
+        exit 1
+    fi
+
+    if ! docker exec "$PEER_NAME" test -f \
+        "${ADMIN_MSP}/config.yaml"
+    then
+        echo "ERROR: Org1 admin MSP config is missing:"
+        echo "  ${ADMIN_MSP}/config.yaml"
+        exit 1
+    fi
+
+    # --------------------------------------------------------
+    # Copy channel block
     # --------------------------------------------------------
 
     echo "Copying channel block..."
@@ -153,13 +174,26 @@ for assignment in "${ASSIGNMENTS[@]}"; do
         "${PEER_NAME}:/tmp/${CHANNEL_NAME}.block"
 
     # --------------------------------------------------------
-    # Join channel
+    # Verify copied block
+    # --------------------------------------------------------
+
+    docker exec "$PEER_NAME" test \
+        -s "/tmp/${CHANNEL_NAME}.block"
+
+    # --------------------------------------------------------
+    # Join using Org1 administrator identity
     # --------------------------------------------------------
 
     echo "Joining ${CHANNEL_NAME}..."
 
     docker exec \
-        -e CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/admin-msp \
+        -e CORE_PEER_LOCALMSPID=Org1MSP \
+        -e CORE_PEER_MSPCONFIGPATH="${ADMIN_MSP}" \
+        -e CORE_PEER_ADDRESS="${PEER_NAME}:7051" \
+        -e CORE_PEER_TLS_ENABLED=true \
+        -e CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/fabric/tls/server.crt \
+        -e CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/fabric/tls/server.key \
+        -e CORE_PEER_TLS_ROOTCERT_FILE=/etc/hyperledger/fabric/tls/ca.crt \
         "$PEER_NAME" \
         peer channel join \
         -b "/tmp/${CHANNEL_NAME}.block"
@@ -181,4 +215,3 @@ echo "=============================================="
 echo
 
 echo "All topology assignments have been processed."
-echo

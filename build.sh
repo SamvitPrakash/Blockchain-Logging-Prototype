@@ -42,9 +42,9 @@ docker compose -f build/fabric-enroll-8/compose.yaml up -d
 docker compose -f build/fabric-enroll-9/compose.yaml up -d
 docker compose -f build/fabric-enroll-10/compose.yaml up -d
 
-./scripts/fabric-network/create.sh 10 3 12345
+./scripts/fabric-network/create.sh 10 2 12345
 
-# ./scripts/fabric-network/join-peers.sh
+./scripts/fabric-network/join-peers.sh
 
 ./scripts/vnfm/create.sh
 
