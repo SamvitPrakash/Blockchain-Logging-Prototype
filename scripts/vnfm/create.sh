@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+set -euo pipefail
 
 # ============================================================
 # VNFM Generator
@@ -14,12 +14,12 @@ TEMPLATE_DIR="$PROJECT_ROOT/templates/vnfm"
 BUILD_DIR="$PROJECT_ROOT/build/vnfm"
 
 FABRIC_NETWORK_BUILD_DIR="$PROJECT_ROOT/build/fabric-network"
-FABRIC_BOOTSTRAP_BUILD_DIR="$PROJECT_ROOT/build/fabric-bootstrap"
 
 TOPOLOGY_SOURCE="$FABRIC_NETWORK_BUILD_DIR/topology.json"
 CHANNEL_SOURCE="$FABRIC_NETWORK_BUILD_DIR/channels"
 
 VNFM_NAME="vnfm"
+VNFM_IMAGE="blockchain-vnfm:latest"
 
 ORDERER_NAME="fabric-orderer-1"
 ORDERER_IP="10.10.0.20"
@@ -28,16 +28,41 @@ VNFM_IP="10.10.0.30"
 
 XIT_NETWORK="XIT"
 
+# ============================================================
+# VNFM container paths
+# ============================================================
+
 VNFM_STATE_DIR="/opt/vnfm-state"
+VNFM_CREDENTIAL_DIR="/opt/vnfm-credentials"
 
 VNFM_TOPOLOGY_FILE="${VNFM_STATE_DIR}/topology.json"
 VNFM_CHANNEL_BLOCK_DIR="${VNFM_STATE_DIR}/channels"
 
-VNFM_CREDENTIAL_DIR="${VNFM_STATE_DIR}/credentials"
-
 VNFM_TLS_CA="${VNFM_CREDENTIAL_DIR}/ca.crt"
 VNFM_TLS_CLIENT_CERT="${VNFM_CREDENTIAL_DIR}/client.crt"
 VNFM_TLS_CLIENT_KEY="${VNFM_CREDENTIAL_DIR}/client.key"
+
+# ============================================================
+# VNFM host paths
+# ============================================================
+
+VNFM_CREDENTIAL_HOST_DIR="${BUILD_DIR}/credentials"
+
+# ============================================================
+# Fabric CA
+# ============================================================
+
+CA_NAME="fabric-ca"
+CA_ENDPOINT="${CA_NAME}:7054"
+
+VNFM_CA_IDENTITY="vnfm"
+VNFM_CA_PASSWORD="vnfmpw"
+
+# ============================================================
+# Fabric CA client image
+# ============================================================
+
+FABRIC_CA_CLIENT_IMAGE="hyperledger/fabric-ca:1.5.15"
 
 # ============================================================
 # Validation
@@ -60,7 +85,8 @@ fi
 for file in \
     Dockerfile \
     entrypoint.sh \
-    join-orderer.sh
+    join-orderer.sh \
+    provision-identity.sh
 do
     if [ ! -f "$TEMPLATE_DIR/$file" ]; then
         echo "Error: VNFM template file not found:"
@@ -70,7 +96,7 @@ do
 done
 
 if ! docker network inspect "$XIT_NETWORK" >/dev/null 2>&1; then
-    echo "Error: XIT network does not exist."
+    echo "Error: XIT network '${XIT_NETWORK}' does not exist."
     echo
     echo "Run:"
     echo "  ./scripts/networks/XIT/setup-XIT.sh"
@@ -79,6 +105,24 @@ fi
 
 if docker inspect "$VNFM_NAME" >/dev/null 2>&1; then
     echo "Error: container '${VNFM_NAME}' already exists."
+    exit 1
+fi
+
+if docker inspect "$CA_NAME" >/dev/null 2>&1; then
+    CA_STATUS="$(docker inspect -f '{{.State.Status}}' "$CA_NAME")"
+
+    if [ "$CA_STATUS" != "running" ]; then
+        echo "Error: Fabric CA container exists but is not running."
+        echo
+        echo "Start Fabric CA first:"
+        echo
+        echo "  docker start ${CA_NAME}"
+        exit 1
+    fi
+else
+    echo "Error: Fabric CA container '${CA_NAME}' does not exist."
+    echo
+    echo "Generate and start Fabric CA first."
     exit 1
 fi
 
@@ -94,10 +138,12 @@ if [ -d "$BUILD_DIR" ]; then
 fi
 
 # ============================================================
-# Create build directory
+# Create build directories
 # ============================================================
 
-mkdir -p "$BUILD_DIR"
+mkdir -p \
+    "$BUILD_DIR" \
+    "$VNFM_CREDENTIAL_HOST_DIR"
 
 # ============================================================
 # Copy topology
@@ -114,18 +160,68 @@ cp -a "$CHANNEL_SOURCE" \
       "$BUILD_DIR/channels"
 
 # ============================================================
+# Provision VNFM identity
+# ============================================================
+
+echo
+echo "=============================================="
+echo " Provisioning VNFM identity"
+echo "=============================================="
+echo
+
+echo "CA:"
+echo "  ${CA_NAME}"
+
+echo
+echo "VNFM identity:"
+echo "  ${VNFM_CA_IDENTITY}"
+
+echo
+echo "Output:"
+echo "  ${VNFM_CREDENTIAL_HOST_DIR}"
+
+echo
+echo "CA client image:"
+echo "  ${FABRIC_CA_CLIENT_IMAGE}"
+
+"$TEMPLATE_DIR/provision-identity.sh" \
+    "$VNFM_CREDENTIAL_HOST_DIR" \
+    "$CA_ENDPOINT" \
+    "$VNFM_CA_IDENTITY" \
+    "$VNFM_CA_PASSWORD" \
+    "$FABRIC_CA_CLIENT_IMAGE"
+
+echo
+echo "VNFM credentials:"
+echo "  ${VNFM_CREDENTIAL_HOST_DIR}"
+echo
+
+# ============================================================
+# Verify credentials
+# ============================================================
+
+for file in \
+    ca.crt \
+    client.crt \
+    client.key
+do
+    if [ ! -f "$VNFM_CREDENTIAL_HOST_DIR/$file" ]; then
+        echo "Error: VNFM credential was not generated:"
+        echo "  $VNFM_CREDENTIAL_HOST_DIR/$file"
+        exit 1
+    fi
+done
+
+# ============================================================
 # Build VNFM image
 # ============================================================
 
-IMAGE_NAME="blockchain-vnfm:latest"
-
-echo
 echo "Building VNFM image:"
-echo "  ${IMAGE_NAME}"
+echo "  ${VNFM_IMAGE}"
 echo
 
 docker build \
-    -t "$IMAGE_NAME" \
+    -t "$VNFM_IMAGE" \
     "$TEMPLATE_DIR"
 
 # ============================================================
@@ -136,7 +232,7 @@ cat > "$BUILD_DIR/compose.yaml" <<EOF
 services:
 
   vnfm:
-    image: ${IMAGE_NAME}
+    image: ${VNFM_IMAGE}
 
     container_name: ${VNFM_NAME}
     hostname: ${VNFM_NAME}
@@ -161,6 +257,7 @@ services:
     volumes:
 
       - ${BUILD_DIR}:${VNFM_STATE_DIR}:ro
+      - ${VNFM_CREDENTIAL_HOST_DIR}:${VNFM_CREDENTIAL_DIR}:ro
 
     networks:
 
@@ -202,24 +299,26 @@ echo
 echo "VNFM:"
 echo "  Name:       ${VNFM_NAME}"
 echo "  IP:         ${VNFM_IP}"
-
 echo
+
 echo "Orderer:"
 echo "  Name:       ${ORDERER_NAME}"
 echo "  IP:         ${ORDERER_IP}"
 echo "  Admin:      ${ORDERER_NAME}:9443"
-
 echo
+
 echo "Topology:"
 echo "  ${BUILD_DIR}/topology.json"
-
 echo
+
 echo "Channels:"
 echo "  ${BUILD_DIR}/channels/"
-
 echo
+
+echo "Credentials:"
+echo "  ${VNFM_CREDENTIAL_HOST_DIR}/"
+echo
+
 echo "Compose:"
 echo "  ${BUILD_DIR}/compose.yaml"
-
 echo
-echo "=============================================="
