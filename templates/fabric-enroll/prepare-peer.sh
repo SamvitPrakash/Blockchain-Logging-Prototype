@@ -136,6 +136,16 @@ peer:
       FileKeyStore:
         KeyStore: /etc/hyperledger/fabric/msp/keystore
 
+vm:
+
+  endpoint: unix:///var/run/docker.sock
+
+  docker:
+    tls:
+      enabled: false
+
+    attachStdout: false
+
 chaincode:
 
   mode: net
@@ -164,6 +174,10 @@ YAML
 echo
 echo "Peer configuration generated:"
 echo "  ${CORE_CONFIG}"
+echo
+echo "Docker chaincode builder:"
+echo "  VM endpoint: unix:///var/run/docker.sock"
+echo "  Builder:     hyperledger/fabric-ccenv:2.5"
 echo
 echo "=============================================="
 echo " Fabric peer preparation complete"
