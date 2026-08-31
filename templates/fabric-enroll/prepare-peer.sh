@@ -167,6 +167,8 @@ chaincode:
     _lifecycle: enable
     cscc: enable
     lscc: enable
+    escc: enable
+    vscc: enable
     qscc: enable
 
 operations:

@@ -175,21 +175,20 @@ install_chaincode()
 
     configure_peer "${peer}"
 
+    local package_id
+    package_id="$(get_package_id "${peer}" || true)"
+
     echo
     echo "Checking ${CHAINCODE_NAME} installation on ${peer}..."
 
-    local existing_package_id
-
-    existing_package_id="$(get_package_id "${peer}" || true)"
-
-    if [ -n "${existing_package_id}" ]; then
+    if [ -n "${package_id}" ]; then
         echo "  ${peer}: ${CHAINCODE_NAME} already installed."
-        echo "  Package ID: ${existing_package_id}"
+        echo "  Package ID: ${package_id}"
         return 0
     fi
 
-    echo
-    echo "Installing ${CHAINCODE_NAME} on ${peer}..."
+    echo "  ${peer}: ${CHAINCODE_NAME} not installed."
+    echo "  Installing..."
 
     peer lifecycle chaincode install \
         "${PACKAGE_FILE}"
@@ -204,9 +203,14 @@ get_package_id()
     configure_peer "${peer}"
 
     peer lifecycle chaincode queryinstalled 2>/dev/null |
-        sed -n \
-        's/.*Package ID: \([^,]*\), Label: '"${PACKAGE_LABEL}"'.*/\1/p' |
-        head -n 1
+        awk -v label="${PACKAGE_LABEL}" '
+            $0 ~ /Package ID:/ && $0 ~ ("Label: " label) {
+                sub(/^.*Package ID: /, "", $0)
+                sub(/, Label:.*$/, "", $0)
+                print
+                exit
+            }
+        '
 }
 
 approve_chaincode()
