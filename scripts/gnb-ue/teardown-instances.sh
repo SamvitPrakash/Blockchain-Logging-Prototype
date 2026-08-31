@@ -11,7 +11,8 @@ for compose_file in build/gnb-*/compose.yaml; do
 
     echo
     echo "Stopping $(dirname "$compose_file")..."
-    docker compose -f "$compose_file" down
+    # docker compose -f "$compose_file" down
+    docker rm -f "$compose_file"
 done
 
 for compose_file in build/ue-*/compose.yaml; do
@@ -19,7 +20,8 @@ for compose_file in build/ue-*/compose.yaml; do
 
     echo
     echo "Stopping $(dirname "$compose_file")..."
-    docker compose -f "$compose_file" down
+    # docker compose -f "$compose_file" down
+    docker rm -f "$compose_file"
 done
 
 echo
@@ -32,7 +34,8 @@ for compose_file in build/fabric-enroll-*/compose.yaml; do
 
     echo
     echo "Stopping $(dirname "$compose_file")..."
-    docker compose -f "$compose_file" down
+    # docker compose -f "$compose_file" down
+    docker rm -f "$compose_file"
 done
 
 echo
@@ -47,6 +50,14 @@ done
 
 echo
 echo "=============================================="
+echo " Removing subscribers"
+echo "=============================================="
+
+docker exec mongo mongosh --quiet open5gs --eval \
+'db.subscribers.deleteMany({})'
+
+echo
+echo "=============================================="
 echo " Removing XIT network"
 echo "=============================================="
 
@@ -55,14 +66,6 @@ if docker network inspect XIT >/dev/null 2>&1; then
 else
     echo "XIT does not exist."
 fi
-
-echo
-echo "=============================================="
-echo " Removing subscribers"
-echo "=============================================="
-
-docker exec mongo mongosh --quiet open5gs --eval \
-'db.subscribers.deleteMany({})'
 
 echo
 echo "=============================================="

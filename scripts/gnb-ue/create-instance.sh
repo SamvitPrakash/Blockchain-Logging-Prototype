@@ -3,7 +3,7 @@
 set -e
 
 # ============================================================
-# Open5GS / UERANSIM Instance Generator
+# gNB / UE Instance Generator
 # ============================================================
 
 if [ "$#" -ne 1 ]; then
@@ -23,54 +23,56 @@ fi
 # ============================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_ROOT="$(realpath "$SCRIPT_DIR/../..")"
 
-DOCKER_OPEN5GS="$PROJECT_ROOT/docker_open5gs"
 BUILD_DIR="$PROJECT_ROOT/build"
-
-GNB_TEMPLATE="$PROJECT_ROOT/templates/gnb/config.yaml"
-UE_TEMPLATE="$PROJECT_ROOT/templates/ue/config.yaml"
 
 GNB_BUILD_DIR="$BUILD_DIR/gnb-${INSTANCE}"
 UE_BUILD_DIR="$BUILD_DIR/ue-${INSTANCE}"
 
 # ============================================================
-# Open5GS configuration
+# Templates / scripts
 # ============================================================
 
-MCC="001"
-MNC="01"
-TAC="1"
+GNB_TEMPLATE="$PROJECT_ROOT/templates/gnb/config.yaml"
+UE_TEMPLATE="$PROJECT_ROOT/templates/ue/config.yaml"
 
-AMF_IP="172.22.0.10"
+GNB_INIT="$PROJECT_ROOT/docker_open5gs/ueransim/ueransim-gnb_init.sh"
+UE_INIT="$PROJECT_ROOT/docker_open5gs/ueransim/ueransim-ue_init.sh"
 
 # ============================================================
-# Instance-specific network configuration
+# Docker resources
 # ============================================================
 
-GNB_IP="172.22.0.$((40 + (INSTANCE - 1) * 2))"
-UE_IP="172.22.0.$((41 + (INSTANCE - 1) * 2))"
+GNB_LOG_VOLUME="gnb-${INSTANCE}-logs"
 
-NCI=$(printf "0x%09x" "$INSTANCE")
+# ============================================================
+# Instance configuration
+# ============================================================
 
 GNB_CONTAINER="nr_gnb_${INSTANCE}"
 UE_CONTAINER="nr_ue_${INSTANCE}"
 
 # ============================================================
-# Subscriber configuration
+# Network configuration
 # ============================================================
 
-IMSI="00101$(printf "%010d" "$INSTANCE")"
-
-KI="8baf473f2f8fd09487cccbd7097c6862"
-OP="11111111111111111111111111111111"
-UE_AMF="8000"
-
-IMEI="356938035643803"
-IMEISV="4370816125816$(printf "%03d" "$INSTANCE")"
+GNB_IP="172.22.0.$((40 + INSTANCE - 1))"
+UE_IP="172.22.0.$((50 + INSTANCE - 1))"
 
 # ============================================================
-# Validate required files
+# 5G configuration
+# ============================================================
+
+MCC="001"
+MNC="01"
+TAC="1"
+NCI="$INSTANCE"
+
+AMF_IP="172.22.0.10"
+
+# ============================================================
+# Validation
 # ============================================================
 
 if [ ! -f "$GNB_TEMPLATE" ]; then
@@ -85,36 +87,35 @@ if [ ! -f "$UE_TEMPLATE" ]; then
     exit 1
 fi
 
-if [ ! -f "$DOCKER_OPEN5GS/ueransim/ueransim-gnb_init.sh" ]; then
-    echo "Error: UERANSIM gNB init script not found."
+if [ ! -f "$GNB_INIT" ]; then
+    echo "Error: gNB init script not found:"
+    echo "  $GNB_INIT"
     exit 1
 fi
 
-if [ ! -f "$DOCKER_OPEN5GS/ueransim/ueransim-ue_init.sh" ]; then
-    echo "Error: UERANSIM UE init script not found."
+if [ ! -f "$UE_INIT" ]; then
+    echo "Error: UE init script not found:"
+    echo "  $UE_INIT"
     exit 1
 fi
-
-# ============================================================
-# Check MongoDB
-# ============================================================
-
-if ! docker ps --format '{{.Names}}' | grep -qx "mongo"; then
-    echo "Error: MongoDB container 'mongo' is not running."
-    exit 1
-fi
-
-# ============================================================
-# Check for duplicate instance
-# ============================================================
 
 if [ -d "$GNB_BUILD_DIR" ] || [ -d "$UE_BUILD_DIR" ]; then
     echo "Error: instance ${INSTANCE} already exists."
     echo
-    echo "Existing directories:"
     [ -d "$GNB_BUILD_DIR" ] && echo "  $GNB_BUILD_DIR"
     [ -d "$UE_BUILD_DIR" ] && echo "  $UE_BUILD_DIR"
     exit 1
+fi
+
+# ============================================================
+# Create Docker log volume
+# ============================================================
+
+if docker volume inspect "$GNB_LOG_VOLUME" >/dev/null 2>&1; then
+    echo "Using existing Docker volume: $GNB_LOG_VOLUME"
+else
+    docker volume create "$GNB_LOG_VOLUME" >/dev/null
+    echo "Created Docker volume: $GNB_LOG_VOLUME"
 fi
 
 # ============================================================
@@ -125,14 +126,11 @@ mkdir -p "$GNB_BUILD_DIR"
 mkdir -p "$UE_BUILD_DIR"
 
 # ============================================================
-# Copy upstream UERANSIM initialization scripts
+# Copy initialization scripts
 # ============================================================
 
-cp "$DOCKER_OPEN5GS/ueransim/ueransim-gnb_init.sh" \
-   "$GNB_BUILD_DIR/ueransim-gnb_init.sh"
-
-cp "$DOCKER_OPEN5GS/ueransim/ueransim-ue_init.sh" \
-   "$UE_BUILD_DIR/ueransim-ue_init.sh"
+cp "$GNB_INIT" "$GNB_BUILD_DIR/ueransim-gnb_init.sh"
+cp "$UE_INIT" "$UE_BUILD_DIR/ueransim-ue_init.sh"
 
 chmod +x "$GNB_BUILD_DIR/ueransim-gnb_init.sh"
 chmod +x "$UE_BUILD_DIR/ueransim-ue_init.sh"
@@ -141,33 +139,25 @@ chmod +x "$UE_BUILD_DIR/ueransim-ue_init.sh"
 # Generate gNB configuration
 # ============================================================
 
-export MCC
-export MNC
-export TAC
-export NCI
-export GNB_IP
-export AMF_IP
+cp "$GNB_TEMPLATE" "$GNB_BUILD_DIR/ueransim-gnb.yaml"
 
-envsubst < "$GNB_TEMPLATE" \
-    > "$GNB_BUILD_DIR/ueransim-gnb.yaml"
+sed -i \
+    -e "s|\${MCC}|${MCC}|g" \
+    -e "s|\${MNC}|${MNC}|g" \
+    -e "s|\${NCI}|${NCI}|g" \
+    -e "s|\${TAC}|${TAC}|g" \
+    -e "s|\${GNB_IP}|${GNB_IP}|g" \
+    -e "s|\${AMF_IP}|${AMF_IP}|g" \
+    "$GNB_BUILD_DIR/ueransim-gnb.yaml"
 
 # ============================================================
 # Generate UE configuration
 # ============================================================
 
-export IMSI
-export KI
-export OP
-export UE_AMF
-export IMEI
-export IMEISV
-export GNB_IP
-
-envsubst < "$UE_TEMPLATE" \
-    > "$UE_BUILD_DIR/ueransim-ue.yaml"
+cp "$UE_TEMPLATE" "$UE_BUILD_DIR/ueransim-ue.yaml"
 
 # ============================================================
-# Generate gNB Docker Compose
+# Generate gNB Compose
 # ============================================================
 
 cat > "$GNB_BUILD_DIR/compose.yaml" <<EOF
@@ -180,6 +170,7 @@ services:
 
     volumes:
       - ${GNB_BUILD_DIR}:/mnt/ueransim
+      - ${GNB_LOG_VOLUME}:/mnt/gnb-logs
       - /etc/localtime:/etc/localtime:ro
 
     environment:
@@ -203,10 +194,15 @@ networks:
   default:
     external: true
     name: docker_open5gs_default
+
+volumes:
+  ${GNB_LOG_VOLUME}:
+    external: true
+    name: ${GNB_LOG_VOLUME}
 EOF
 
 # ============================================================
-# Generate UE Docker Compose
+# Generate UE Compose
 # ============================================================
 
 cat > "$UE_BUILD_DIR/compose.yaml" <<EOF
@@ -243,91 +239,30 @@ networks:
 EOF
 
 # ============================================================
-# Insert subscriber into MongoDB
-# ============================================================
-
-docker exec mongo mongosh --quiet open5gs --eval "
-if (db.subscribers.countDocuments({imsi: '${IMSI}'}) > 0) {
-    print('ERROR: Subscriber ${IMSI} already exists.');
-    quit(1);
-}
-
-db.subscribers.insertOne({
-    schema_version: 1,
-    msisdn: [],
-    imeisv: '${IMEISV}',
-    mme_host: [],
-    mme_realm: [],
-    purge_flag: [],
-    access_restriction_data: 32,
-    subscriber_status: 0,
-    operator_determined_barring: 0,
-    network_access_mode: 0,
-    subscribed_rau_tau_timer: 12,
-
-    imsi: '${IMSI}',
-
-    security: {
-        k: '${KI}',
-        amf: '${UE_AMF}',
-        op: '${OP}',
-        opc: null,
-        sqn: NumberLong('0')
-    },
-
-    ambr: {
-        downlink: { value: 1, unit: 3 },
-        uplink: { value: 1, unit: 3 }
-    },
-
-    slice: [{
-        sst: 1,
-        default_indicator: true,
-        session: [{
-            name: 'internet',
-            type: 3,
-            qos: {
-                arp: {
-                    priority_level: 8,
-                    pre_emption_capability: 1,
-                    pre_emption_vulnerability: 1
-                },
-                index: 9
-            },
-            ambr: {
-                downlink: { value: 1, unit: 3 },
-                uplink: { value: 1, unit: 3 }
-            },
-            pcc_rule: []
-        }]
-    }],
-
-    __v: 0
-});
-"
-
-# ============================================================
 # Finished
 # ============================================================
 
 echo
 echo "=============================================="
-echo " Instance ${INSTANCE} created successfully"
+echo " Instance ${INSTANCE} generated"
 echo "=============================================="
 echo
 echo "gNB:"
-echo "  Container : ${GNB_CONTAINER}"
-echo "  IP        : ${GNB_IP}"
-echo "  NCI       : ${NCI}"
+echo "  Container    : ${GNB_CONTAINER}"
+echo "  IP           : ${GNB_IP}"
+echo "  MCC          : ${MCC}"
+echo "  MNC          : ${MNC}"
+echo "  TAC          : ${TAC}"
+echo "  NCI          : ${NCI}"
+echo "  AMF IP       : ${AMF_IP}"
 echo
 echo "UE:"
-echo "  Container : ${UE_CONTAINER}"
-echo "  IP        : ${UE_IP}"
-echo "  IMSI      : ${IMSI}"
+echo "  Container    : ${UE_CONTAINER}"
+echo "  IP           : ${UE_IP}"
 echo
-echo "Subscriber:"
-echo "  MongoDB   : open5gs.subscribers"
-echo "  IMSI      : ${IMSI}"
+echo "Logging:"
+echo "  Docker volume: ${GNB_LOG_VOLUME}"
+echo "  gNB mount     : /mnt/gnb-logs"
 echo
 echo "Generated:"
 echo "  ${GNB_BUILD_DIR}"
