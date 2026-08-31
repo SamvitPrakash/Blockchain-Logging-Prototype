@@ -2,252 +2,150 @@
 
 set -euo pipefail
 
-# ============================================================
-# Fabric Peer Configuration Preparation
-# ============================================================
-
 : "${PEER_NAME:?PEER_NAME is required}"
 : "${PEER_HOSTNAME:?PEER_HOSTNAME is required}"
-: "${PEER_IP:?PEER_IP is required}"
 : "${PEER_STATE_DIR:?PEER_STATE_DIR is required}"
 
-CORE_LOCALMSPID="${CORE_LOCALMSPID:-Org1MSP}"
-PEER_ID="${PEER_ID:-${PEER_NAME}}"
-
-# ============================================================
-# Host/enrollment paths
-#
-# These paths exist on the host/enrollment container.
-# They must NOT be written into core.yaml.
-# ============================================================
-
-PEER_MSP_DIR="${PEER_STATE_DIR}/msp"
-PEER_TLS_DIR="${PEER_STATE_DIR}/tls"
+MSP_DIR="${PEER_STATE_DIR}/msp"
+TLS_DIR="${PEER_STATE_DIR}/tls"
 CORE_CONFIG="${PEER_STATE_DIR}/core.yaml"
-
-# ============================================================
-# Runtime paths
-#
-# These are the paths as seen by fabric-peer.
-# ============================================================
-
-RUNTIME_ROOT="/etc/hyperledger/fabric"
-RUNTIME_MSP_DIR="${RUNTIME_ROOT}/msp"
-RUNTIME_TLS_DIR="${RUNTIME_ROOT}/tls"
-RUNTIME_LEDGER_DIR="/var/hyperledger/production"
-
-# ============================================================
-# Fabric chaincode images
-# ============================================================
-
-CHAINCODE_BUILDER="hyperledger/fabric-ccenv:2.5"
-CHAINCODE_NODE_RUNTIME="hyperledger/fabric-nodeenv:2.5"
+PRODUCTION_DIR="${PEER_STATE_DIR}/production"
 
 echo "=============================================="
-echo " Preparing Fabric peer configuration"
+echo " Preparing Fabric peer"
 echo "=============================================="
 echo
-echo "Peer ID              : ${PEER_ID}"
-echo "Peer address         : ${PEER_HOSTNAME}:7051"
-echo "Chaincode address    : ${PEER_HOSTNAME}:7052"
-echo "Local MSP ID         : ${CORE_LOCALMSPID}"
-echo "MSP path             : ${PEER_MSP_DIR}"
-echo "State directory      : ${PEER_STATE_DIR}"
+echo "Peer          : ${PEER_NAME}"
+echo "Hostname      : ${PEER_HOSTNAME}"
+echo "Peer state    : ${PEER_STATE_DIR}"
 echo
 
-# ============================================================
-# Validate peer identity
-# ============================================================
-
-if [ ! -f "${PEER_MSP_DIR}/signcerts/cert.pem" ]; then
-    echo "ERROR: Peer MSP certificate not found:"
-    echo "  ${PEER_MSP_DIR}/signcerts/cert.pem"
+if [ ! -d "${PEER_STATE_DIR}" ]; then
+    echo "Error: peer state directory does not exist:"
+    echo "  ${PEER_STATE_DIR}"
     exit 1
 fi
 
-if [ ! -f "${PEER_MSP_DIR}/config.yaml" ]; then
-    echo "ERROR: Peer MSP config not found:"
-    echo "  ${PEER_MSP_DIR}/config.yaml"
+if [ ! -d "${MSP_DIR}" ]; then
+    echo "Error: MSP directory does not exist:"
+    echo "  ${MSP_DIR}"
     exit 1
 fi
 
-# ============================================================
-# Locate TLS material
-# ============================================================
-
-TLS_CERT="${PEER_TLS_DIR}/signcerts/cert.pem"
-
-TLS_CA="$(
-    find "${PEER_TLS_DIR}/tlscacerts" \
-        -maxdepth 1 \
-        -type f \
-        -name '*.pem' \
-        -print -quit 2>/dev/null || true
-)"
-
-TLS_KEY="$(
-    find "${PEER_TLS_DIR}/keystore" \
-        -maxdepth 1 \
-        -type f \
-        -print -quit 2>/dev/null || true
-)"
-
-if [ ! -f "${TLS_CERT}" ]; then
-    echo "ERROR: TLS certificate not found:"
-    echo "  ${TLS_CERT}"
+if [ ! -d "${MSP_DIR}/signcerts" ]; then
+    echo "Error: MSP signcerts directory does not exist:"
+    echo "  ${MSP_DIR}/signcerts"
     exit 1
 fi
 
-if [ -z "${TLS_CA}" ]; then
-    echo "ERROR: TLS CA certificate not found."
+if ! find "${MSP_DIR}/signcerts" \
+    -type f \
+    -name '*.pem' \
+    -print \
+    -quit | grep -q .
+then
+    echo "Error: no MSP signer certificate found."
     exit 1
 fi
 
-if [ -z "${TLS_KEY}" ]; then
-    echo "ERROR: TLS private key not found."
+if [ ! -d "${MSP_DIR}/keystore" ]; then
+    echo "Error: MSP keystore directory does not exist:"
+    echo "  ${MSP_DIR}/keystore"
     exit 1
 fi
 
-# ============================================================
-# Create Fabric-compatible TLS files
-# ============================================================
+if ! find "${MSP_DIR}/keystore" \
+    -type f \
+    -name '*_sk' \
+    -print \
+    -quit | grep -q .
+then
+    echo "Error: no MSP private key found."
+    exit 1
+fi
 
-cp "${TLS_CERT}" "${PEER_TLS_DIR}/server.crt"
-cp "${TLS_KEY}"  "${PEER_TLS_DIR}/server.key"
-cp "${TLS_CA}"   "${PEER_TLS_DIR}/ca.crt"
+if [ ! -f "${MSP_DIR}/config.yaml" ]; then
+    echo "Error: MSP config.yaml does not exist:"
+    echo "  ${MSP_DIR}/config.yaml"
+    exit 1
+fi
 
-chmod 644 "${PEER_TLS_DIR}/server.crt"
-chmod 600 "${PEER_TLS_DIR}/server.key"
-chmod 644 "${PEER_TLS_DIR}/ca.crt"
+if [ ! -d "${TLS_DIR}" ]; then
+    echo "Error: TLS directory does not exist:"
+    echo "  ${TLS_DIR}"
+    exit 1
+fi
 
-# ============================================================
-# Create Fabric directories
-# ============================================================
+for file in server.crt server.key ca.crt; do
+    if [ ! -f "${TLS_DIR}/${file}" ]; then
+        echo "Error: missing TLS file:"
+        echo "  ${TLS_DIR}/${file}"
+        exit 1
+    fi
+done
 
-mkdir -p \
-    "${PEER_STATE_DIR}/ledger" \
-    "${PEER_STATE_DIR}/production" \
-    "${PEER_MSP_DIR}/keystore"
+mkdir -p "${PRODUCTION_DIR}"
 
-# ============================================================
-# Generate core.yaml
-#
-# IMPORTANT:
-# Every path below is a path INSIDE fabric-peer.
-# ============================================================
-
-cat > "${CORE_CONFIG}" <<EOF
-# ============================================================
-# Hyperledger Fabric Peer Configuration
-# Generated by FABRIC-ENROLL
-# ============================================================
-
+cat > "${CORE_CONFIG}" <<YAML
 peer:
 
-  id: ${PEER_ID}
+  id: ${PEER_NAME}
+
   networkId: dev
 
   listenAddress: 0.0.0.0:7051
-  address: ${PEER_HOSTNAME}:7051
-  addressAutoDetect: false
 
-  chaincodeAddress: ${PEER_HOSTNAME}:7052
   chaincodeListenAddress: 0.0.0.0:7052
 
-  localMspId: ${CORE_LOCALMSPID}
-  mspConfigPath: ${RUNTIME_MSP_DIR}
+  chaincodeAddress: ${PEER_HOSTNAME}:7052
 
-  fileSystemPath: ${RUNTIME_LEDGER_DIR}
+  address: ${PEER_HOSTNAME}:7051
 
-  # ----------------------------------------------------------
-  # Gateway
-  # ----------------------------------------------------------
-
-  gateway:
-    enabled: true
-    endorsementTimeout: 30s
-    broadcastTimeout: 30s
-    dialTimeout: 2m
-
-  # ----------------------------------------------------------
-  # Gossip
-  # ----------------------------------------------------------
+  addressAutoDetect: false
 
   gossip:
     bootstrap: ${PEER_HOSTNAME}:7051
     externalEndpoint: ${PEER_HOSTNAME}:7051
-    endpoint: ${PEER_HOSTNAME}:7051
-    useLeaderElection: false
-    orgLeader: true
 
-  # ----------------------------------------------------------
-  # Discovery
-  # ----------------------------------------------------------
+  mspConfigPath: /etc/hyperledger/fabric/msp
 
-  discovery:
-    enabled: true
-    authCacheEnabled: true
-    authCacheMaxSize: 1000
-    orgMembersAllowedAccess: true
+  localMspId: Org1MSP
 
-  # ----------------------------------------------------------
-  # TLS
-  # ----------------------------------------------------------
+  fileSystemPath: /var/hyperledger/production
 
   tls:
     enabled: true
     clientAuthRequired: false
 
     cert:
-      file: ${RUNTIME_TLS_DIR}/server.crt
+      file: /etc/hyperledger/fabric/tls/server.crt
 
     key:
-      file: ${RUNTIME_TLS_DIR}/server.key
+      file: /etc/hyperledger/fabric/tls/server.key
 
     rootcert:
-      file: ${RUNTIME_TLS_DIR}/ca.crt
+      file: /etc/hyperledger/fabric/tls/ca.crt
 
-  authentication:
-    timewindow: 15m
+  BCCSP:
+    Default: SW
 
-# ============================================================
-# BCCSP
-# ============================================================
+    SW:
+      Hash: SHA2
+      Security: 256
 
-BCCSP:
-
-  Default: SW
-
-  SW:
-    Hash: SHA2
-    Security: 256
-
-    FileKeyStore:
-      KeyStore: ${RUNTIME_MSP_DIR}/keystore
-
-# ============================================================
-# Chaincode
-#
-# Fabric 2.5 legacy Docker chaincode builder.
-#
-# The peer talks to Docker through /var/run/docker.sock.
-# ============================================================
-
-vm:
-  endpoint: unix:///var/run/docker.sock
+      FileKeyStore:
+        KeyStore: /etc/hyperledger/fabric/msp/keystore
 
 chaincode:
 
   mode: net
 
-  # THIS WAS MISSING.
-  # Without it Fabric reports:
-  # "No image provided and chaincode.builder default does not exist"
-  builder: ${CHAINCODE_BUILDER}
+  builder: hyperledger/fabric-ccenv:2.5
 
-  # Node chaincode runtime.
-  node:
-    runtime: ${CHAINCODE_NODE_RUNTIME}
+  pull: false
+
+  golang:
+    runtime: hyperledger/fabric-baseos:2.5
 
   system:
     _lifecycle: enable
@@ -255,61 +153,18 @@ chaincode:
     lscc: enable
     qscc: enable
 
-  installTimeout: 300s
-  startuptimeout: 300s
-  executetimeout: 30s
-
-# ============================================================
-# Operations
-# ============================================================
-
 operations:
 
   listenAddress: 0.0.0.0:9443
 
   tls:
     enabled: false
-
-# ============================================================
-# Metrics
-# ============================================================
-
-metrics:
-  provider: prometheus
-EOF
-
-# ============================================================
-# Validate generated configuration
-# ============================================================
-
-if [ ! -s "${CORE_CONFIG}" ]; then
-    echo "ERROR: core.yaml was not generated."
-    exit 1
-fi
+YAML
 
 echo
-echo "Generated:"
+echo "Peer configuration generated:"
 echo "  ${CORE_CONFIG}"
 echo
-
-echo "Runtime paths:"
-echo "  MSP     : ${RUNTIME_MSP_DIR}"
-echo "  TLS     : ${RUNTIME_TLS_DIR}"
-echo "  Ledger  : ${RUNTIME_LEDGER_DIR}"
-echo
-
-echo "Chaincode:"
-echo "  Builder : ${CHAINCODE_BUILDER}"
-echo "  Node    : ${CHAINCODE_NODE_RUNTIME}"
-echo
-
-echo "BCCSP:"
-echo "  Default : SW"
-echo "  Hash    : SHA2"
-echo "  Security: 256"
-echo "  KeyStore: ${RUNTIME_MSP_DIR}/keystore"
-
-echo
 echo "=============================================="
-echo " Peer configuration ready"
+echo " Fabric peer preparation complete"
 echo "=============================================="
