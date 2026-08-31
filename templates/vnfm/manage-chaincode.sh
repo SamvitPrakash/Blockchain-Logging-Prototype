@@ -176,6 +176,19 @@ install_chaincode()
     configure_peer "${peer}"
 
     echo
+    echo "Checking ${CHAINCODE_NAME} installation on ${peer}..."
+
+    local existing_package_id
+
+    existing_package_id="$(get_package_id "${peer}" || true)"
+
+    if [ -n "${existing_package_id}" ]; then
+        echo "  ${peer}: ${CHAINCODE_NAME} already installed."
+        echo "  Package ID: ${existing_package_id}"
+        return 0
+    fi
+
+    echo
     echo "Installing ${CHAINCODE_NAME} on ${peer}..."
 
     peer lifecycle chaincode install \

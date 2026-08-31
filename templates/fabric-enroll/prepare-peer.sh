@@ -136,6 +136,12 @@ peer:
       FileKeyStore:
         KeyStore: /etc/hyperledger/fabric/msp/keystore
 
+  gateway:
+    enabled: true
+
+  discovery:
+    enabled: true
+
 vm:
 
   endpoint: unix:///var/run/docker.sock
