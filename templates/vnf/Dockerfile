@@ -1,33 +1,38 @@
-FROM python:3.12-slim AS python-base
-
-FROM hyperledger/fabric-ca:1.5.17 AS fabric-ca
-
-FROM python-base
+FROM node:20-bookworm-slim
 
 WORKDIR /opt/vnf
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        bash \
+# Install tools required by the existing Fabric CA scripts.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
         ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+        curl \
+        bash \
+        openssl \
+        && rm -rf /var/lib/apt/lists/*
 
-COPY --from=fabric-ca /usr/local/bin/fabric-ca-client /usr/local/bin/fabric-ca-client
+# Fabric CA client
+RUN curl -fsSL \
+    https://github.com/hyperledger/fabric-ca/releases/download/v1.5.17/hyperledger-fabric-ca-linux-amd64-1.5.17.tar.gz \
+    -o /tmp/fabric-ca.tar.gz && \
+    tar -xzf /tmp/fabric-ca.tar.gz -C /tmp && \
+    mv /tmp/bin/fabric-ca-client /usr/local/bin/fabric-ca-client && \
+    chmod +x /usr/local/bin/fabric-ca-client && \
+    rm -rf /tmp/fabric-ca.tar.gz /tmp/bin /tmp/config
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY package.json .
 
-COPY register-vnf.sh /opt/vnf/register-vnf.sh
-COPY enroll-vnf.sh /opt/vnf/enroll-vnf.sh
-COPY entrypoint.sh /opt/vnf/entrypoint.sh
+RUN npm install --omit=dev
 
 COPY src ./src
 
-RUN chmod +x \
-    /opt/vnf/register-vnf.sh \
-    /opt/vnf/enroll-vnf.sh \
-    /opt/vnf/entrypoint.sh
+COPY entrypoint.sh .
+COPY register-vnf.sh .
+COPY enroll-vnf.sh .
 
-ENV PYTHONUNBUFFERED=1
+RUN chmod +x \
+    /opt/vnf/entrypoint.sh \
+    /opt/vnf/register-vnf.sh \
+    /opt/vnf/enroll-vnf.sh
 
 ENTRYPOINT ["/opt/vnf/entrypoint.sh"]

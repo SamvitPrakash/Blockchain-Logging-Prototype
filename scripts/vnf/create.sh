@@ -28,7 +28,7 @@ PROJECT_ROOT="$(realpath "$SCRIPT_DIR/../..")"
 BUILD_DIR="$PROJECT_ROOT/build/vnf-${INSTANCE}"
 TEMPLATE_DIR="$PROJECT_ROOT/templates/vnf"
 
-VNF_STATE_DIR="$BUILD_DIR/state"
+TOPOLOGY_FILE="$PROJECT_ROOT/build/fabric-network/topology.json"
 
 # ============================================================
 # Instance configuration
@@ -38,7 +38,12 @@ VNF_ID="vnf-${INSTANCE}"
 GNB_ID="gnb-${INSTANCE}"
 GNB_CONTAINER="nr_gnb_${INSTANCE}"
 VNF_CONTAINER="vnf-${INSTANCE}"
+
 FABRIC_PEER="fabric-peer-${INSTANCE}"
+
+# ============================================================
+# Network configuration
+# ============================================================
 
 OAM_NETWORK="OAM-${INSTANCE}"
 XIT_NETWORK="XIT"
@@ -46,26 +51,18 @@ XIT_NETWORK="XIT"
 VNF_OAM_IP="10.20.${INSTANCE}.3"
 VNF_XIT_IP="10.10.0.$((150 + INSTANCE))"
 
+# Fabric peer addressing:
+# peer 1 = 10.10.0.101
+# peer 2 = 10.10.0.102
+# ...
+
 FABRIC_PEER_IP="10.10.0.$((100 + INSTANCE))"
 
 # ============================================================
-# Log volume
+# Fabric configuration
 # ============================================================
 
-GNB_LOG_VOLUME="gnb-${INSTANCE}-logs"
-
-# ============================================================
-# Fabric CA
-# ============================================================
-
-FABRIC_CA_IP="10.10.0.11"
-FABRIC_CA_PORT="7054"
-
-# ============================================================
-# VNF credentials
-# ============================================================
-
-VNF_SECRET="vnfpw"
+FABRIC_CHAINCODE="logging"
 
 # ============================================================
 # Validation
@@ -77,20 +74,11 @@ if [ ! -d "$TEMPLATE_DIR" ]; then
     exit 1
 fi
 
-for file in \
-    Dockerfile \
-    entrypoint.sh \
-    register-vnf.sh \
-    enroll-vnf.sh \
-    requirements.txt \
-    src/main.py
-do
-    if [ ! -f "$TEMPLATE_DIR/$file" ]; then
-        echo "Error: VNF template file not found:"
-        echo "  $TEMPLATE_DIR/$file"
-        exit 1
-    fi
-done
+if [ ! -f "$TOPOLOGY_FILE" ]; then
+    echo "Error: Fabric topology not found:"
+    echo "  $TOPOLOGY_FILE"
+    exit 1
+fi
 
 if ! docker network inspect "$OAM_NETWORK" >/dev/null 2>&1; then
     echo "Error: OAM network '${OAM_NETWORK}' does not exist."
@@ -108,13 +96,6 @@ if ! docker network inspect "$XIT_NETWORK" >/dev/null 2>&1; then
     exit 1
 fi
 
-if ! docker volume inspect "$GNB_LOG_VOLUME" >/dev/null 2>&1; then
-    echo "Error: gNB log volume '${GNB_LOG_VOLUME}' does not exist."
-    echo
-    echo "Create the corresponding gNB instance first."
-    exit 1
-fi
-
 if [ -d "$BUILD_DIR" ]; then
     echo "Error: VNF instance ${INSTANCE} already exists:"
     echo "  $BUILD_DIR"
@@ -122,10 +103,43 @@ if [ -d "$BUILD_DIR" ]; then
 fi
 
 # ============================================================
+# Determine Fabric channel
+# ============================================================
+
+FABRIC_CHANNEL="$(
+    python3 - "$TOPOLOGY_FILE" "$FABRIC_PEER" <<'PY'
+import json
+import sys
+
+topology_file = sys.argv[1]
+peer_name = sys.argv[2]
+
+with open(topology_file, "r", encoding="utf-8") as f:
+    topology = json.load(f)
+
+peer_to_channel = topology.get("peer_to_channel", {})
+
+channel = peer_to_channel.get(peer_name)
+
+if not channel:
+    raise SystemExit(
+        f"Peer {peer_name} is not assigned to a channel."
+    )
+
+print(channel)
+PY
+)"
+
+if [ -z "$FABRIC_CHANNEL" ]; then
+    echo "Error: could not determine Fabric channel for ${FABRIC_PEER}."
+    exit 1
+fi
+
+# ============================================================
 # Prepare build directory
 # ============================================================
 
-mkdir -p "$VNF_STATE_DIR"
+mkdir -p "$BUILD_DIR"
 
 # ============================================================
 # Generate Compose
@@ -148,15 +162,15 @@ services:
 
       FABRIC_PEER: ${FABRIC_PEER}
       FABRIC_PEER_IP: ${FABRIC_PEER_IP}
+      FABRIC_CHANNEL: ${FABRIC_CHANNEL}
+      FABRIC_CHAINCODE: ${FABRIC_CHAINCODE}
 
-      FABRIC_CA_IP: ${FABRIC_CA_IP}
-      FABRIC_CA_PORT: ${FABRIC_CA_PORT}
-
-      VNF_SECRET: ${VNF_SECRET}
+      FABRIC_CA_IP: 10.10.0.11
+      FABRIC_CA_PORT: 7054
 
     volumes:
-      - ${GNB_LOG_VOLUME}:/mnt/gnb-logs:ro
-      - ${VNF_STATE_DIR}:/opt/vnf-state
+      - ${BUILD_DIR}/state:/opt/vnf-state
+      - gnb-${INSTANCE}-logs:/mnt/gnb-logs:ro
 
     networks:
       oam:
@@ -175,9 +189,9 @@ networks:
     name: ${XIT_NETWORK}
 
 volumes:
-  ${GNB_LOG_VOLUME}:
+  gnb-${INSTANCE}-logs:
     external: true
-    name: ${GNB_LOG_VOLUME}
+    name: gnb-${INSTANCE}-logs
 EOF
 
 # ============================================================
@@ -193,7 +207,6 @@ echo "VNF:"
 echo "  Container    : ${VNF_CONTAINER}"
 echo "  VNF ID       : ${VNF_ID}"
 echo "  gNB          : ${GNB_CONTAINER}"
-echo "  gNB ID       : ${GNB_ID}"
 echo
 echo "OAM:"
 echo "  Network      : ${OAM_NETWORK}"
@@ -206,17 +219,8 @@ echo
 echo "Fabric:"
 echo "  Peer         : ${FABRIC_PEER}"
 echo "  Peer IP      : ${FABRIC_PEER_IP}"
-echo
-echo "Fabric CA:"
-echo "  Address      : ${FABRIC_CA_IP}:${FABRIC_CA_PORT}"
-echo
-echo "Logs:"
-echo "  Volume       : ${GNB_LOG_VOLUME}"
-echo "  Mount        : /mnt/gnb-logs (read-only)"
-echo
-echo "VNF state:"
-echo "  Host         : ${VNF_STATE_DIR}"
-echo "  Container    : /opt/vnf-state"
+echo "  Channel      : ${FABRIC_CHANNEL}"
+echo "  Chaincode    : ${FABRIC_CHAINCODE}"
 echo
 echo "Generated:"
 echo "  ${BUILD_DIR}/compose.yaml"

@@ -14,7 +14,6 @@ PRODUCTION_DIR="${PEER_STATE_DIR}/production"
 echo "=============================================="
 echo " Preparing Fabric peer"
 echo "=============================================="
-
 echo
 echo "Peer              : ${PEER_NAME}"
 echo "Hostname          : ${PEER_HOSTNAME}"
@@ -96,12 +95,24 @@ peer:
   address: ${PEER_HOSTNAME}:7051
   addressAutoDetect: false
 
+  gateway:
+    enabled: true
+    endorsementTimeout: 30s
+    broadcastTimeout: 30s
+    dialTimeout: 2m
+
   gossip:
     bootstrap: ${PEER_HOSTNAME}:7051
     externalEndpoint: ${PEER_HOSTNAME}:7051
     endpoint: ${PEER_HOSTNAME}:7051
     useLeaderElection: false
     orgLeader: false
+
+  discovery:
+    enabled: true
+    authCacheEnabled: true
+    authCacheMaxSize: 1000
+    orgMembersAllowedAccess: true
 
   mspConfigPath: /etc/hyperledger/fabric/msp
   localMspId: Org1MSP
@@ -130,6 +141,9 @@ peer:
 
       FileKeyStore:
         KeyStore: /etc/hyperledger/fabric/msp/keystore
+
+  authentication:
+    timewindow: 15m
 
 vm:
   endpoint: unix:///var/run/docker.sock
