@@ -41,6 +41,7 @@ PEER_ID="${PEER_NAME}"
 PEER_HOSTNAME="${PEER_NAME}"
 
 XIT_NETWORK="XIT"
+
 VNF_XIT_IP="10.10.0.$((50 + INSTANCE))"
 PEER_IP="10.10.0.$((100 + INSTANCE))"
 
@@ -55,6 +56,9 @@ PEER_SECRET="peerpw"
 PEER_STATE_DIR="/opt/fabric-enroll-state/peer"
 
 CA_IP="10.10.0.11"
+
+CHAINCODE_BUILDER="hyperledger/fabric-ccenv:2.5"
+CHAINCODE_NODE_RUNTIME="hyperledger/fabric-nodeenv:2.5"
 
 # ============================================================
 # Host ownership
@@ -193,6 +197,7 @@ services:
         condition: service_completed_successfully
 
     environment:
+
       FABRIC_CFG_PATH: "/etc/hyperledger/fabric"
 
       CORE_PEER_ID: "${PEER_ID}"
@@ -210,14 +215,18 @@ services:
       CORE_PEER_TLS_KEY_FILE: "/etc/hyperledger/fabric/tls/server.key"
       CORE_PEER_TLS_ROOTCERT_FILE: "/etc/hyperledger/fabric/tls/ca.crt"
 
+      # Explicit Node chaincode runtime.
+      CORE_CHAINCODE_NODE_RUNTIME: "${CHAINCODE_NODE_RUNTIME}"
+
     volumes:
+
       # Generated peer configuration and identities
       - ${HOST_PEER_STATE_DIR}:/etc/hyperledger/fabric:rw
 
       # Fabric ledger/production state
       - ${HOST_PEER_STATE_DIR}/production:/var/hyperledger/production:rw
 
-      # Docker socket for chaincode containers
+      # Legacy Fabric Docker chaincode builder
       - /var/run/docker.sock:/var/run/docker.sock
 
     command:
@@ -322,16 +331,24 @@ echo "=============================================="
 echo " FABRIC-ENROLL instance generated"
 echo "=============================================="
 echo
+
 echo "FABRIC-ENROLL:"
 echo "  Name       : ${VNF_NAME}"
 echo "  Container  : ${VNF_CONTAINER}"
 echo "  XIT IP     : ${VNF_XIT_IP}"
 echo
+
 echo "Fabric peer:"
 echo "  Name       : ${PEER_NAME}"
 echo "  ID         : ${PEER_ID}"
 echo "  XIT IP     : ${PEER_IP}"
 echo
+
+echo "Chaincode:"
+echo "  Builder    : ${CHAINCODE_BUILDER}"
+echo "  Node       : ${CHAINCODE_NODE_RUNTIME}"
+echo
+
 echo "Build:"
 echo "  ${BUILD_DIR}"
 echo

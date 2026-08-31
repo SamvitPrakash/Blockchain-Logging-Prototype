@@ -14,26 +14,34 @@ set -euo pipefail
 CORE_LOCALMSPID="${CORE_LOCALMSPID:-Org1MSP}"
 PEER_ID="${PEER_ID:-${PEER_NAME}}"
 
-# ------------------------------------------------------------
+# ============================================================
 # Host/enrollment paths
 #
-# These paths are used ONLY while preparing the state.
-# They must NOT be written into core.yaml because the peer
-# container sees the state directory at /etc/hyperledger/fabric.
-# ------------------------------------------------------------
+# These paths exist on the host/enrollment container.
+# They must NOT be written into core.yaml.
+# ============================================================
 
 PEER_MSP_DIR="${PEER_STATE_DIR}/msp"
 PEER_TLS_DIR="${PEER_STATE_DIR}/tls"
 CORE_CONFIG="${PEER_STATE_DIR}/core.yaml"
 
-# ------------------------------------------------------------
-# Runtime paths as seen from fabric-peer-1
-# ------------------------------------------------------------
+# ============================================================
+# Runtime paths
+#
+# These are the paths as seen by fabric-peer.
+# ============================================================
 
 RUNTIME_ROOT="/etc/hyperledger/fabric"
 RUNTIME_MSP_DIR="${RUNTIME_ROOT}/msp"
 RUNTIME_TLS_DIR="${RUNTIME_ROOT}/tls"
 RUNTIME_LEDGER_DIR="/var/hyperledger/production"
+
+# ============================================================
+# Fabric chaincode images
+# ============================================================
+
+CHAINCODE_BUILDER="hyperledger/fabric-ccenv:2.5"
+CHAINCODE_NODE_RUNTIME="hyperledger/fabric-nodeenv:2.5"
 
 echo "=============================================="
 echo " Preparing Fabric peer configuration"
@@ -63,12 +71,6 @@ if [ ! -f "${PEER_MSP_DIR}/config.yaml" ]; then
     exit 1
 fi
 
-if [ ! -f "${PEER_TLS_DIR}/signcerts/cert.pem" ]; then
-    echo "ERROR: Peer TLS certificate not found:"
-    echo "  ${PEER_TLS_DIR}/signcerts/cert.pem"
-    exit 1
-fi
-
 # ============================================================
 # Locate TLS material
 # ============================================================
@@ -89,6 +91,12 @@ TLS_KEY="$(
         -type f \
         -print -quit 2>/dev/null || true
 )"
+
+if [ ! -f "${TLS_CERT}" ]; then
+    echo "ERROR: TLS certificate not found:"
+    echo "  ${TLS_CERT}"
+    exit 1
+fi
 
 if [ -z "${TLS_CA}" ]; then
     echo "ERROR: TLS CA certificate not found."
@@ -113,7 +121,7 @@ chmod 600 "${PEER_TLS_DIR}/server.key"
 chmod 644 "${PEER_TLS_DIR}/ca.crt"
 
 # ============================================================
-# Create peer directories
+# Create Fabric directories
 # ============================================================
 
 mkdir -p \
@@ -125,7 +133,7 @@ mkdir -p \
 # Generate core.yaml
 #
 # IMPORTANT:
-# Every path below is a PATH INSIDE fabric-peer-1.
+# Every path below is a path INSIDE fabric-peer.
 # ============================================================
 
 cat > "${CORE_CONFIG}" <<EOF
@@ -135,12 +143,25 @@ cat > "${CORE_CONFIG}" <<EOF
 # ============================================================
 
 peer:
-  id: ${PEER_NAME}
+
+  id: ${PEER_ID}
   networkId: dev
 
   listenAddress: 0.0.0.0:7051
   address: ${PEER_HOSTNAME}:7051
   addressAutoDetect: false
+
+  chaincodeAddress: ${PEER_HOSTNAME}:7052
+  chaincodeListenAddress: 0.0.0.0:7052
+
+  localMspId: ${CORE_LOCALMSPID}
+  mspConfigPath: ${RUNTIME_MSP_DIR}
+
+  fileSystemPath: ${RUNTIME_LEDGER_DIR}
+
+  # ----------------------------------------------------------
+  # Gateway
+  # ----------------------------------------------------------
 
   gateway:
     enabled: true
@@ -148,12 +169,20 @@ peer:
     broadcastTimeout: 30s
     dialTimeout: 2m
 
+  # ----------------------------------------------------------
+  # Gossip
+  # ----------------------------------------------------------
+
   gossip:
     bootstrap: ${PEER_HOSTNAME}:7051
     externalEndpoint: ${PEER_HOSTNAME}:7051
     endpoint: ${PEER_HOSTNAME}:7051
     useLeaderElection: false
-    orgLeader: false
+    orgLeader: true
+
+  # ----------------------------------------------------------
+  # Discovery
+  # ----------------------------------------------------------
 
   discovery:
     enabled: true
@@ -161,27 +190,32 @@ peer:
     authCacheMaxSize: 1000
     orgMembersAllowedAccess: true
 
-  mspConfigPath: /etc/hyperledger/fabric/msp
-  localMspId: Org1MSP
-  fileSystemPath: /var/hyperledger/production
+  # ----------------------------------------------------------
+  # TLS
+  # ----------------------------------------------------------
 
   tls:
     enabled: true
     clientAuthRequired: false
 
     cert:
-      file: /etc/hyperledger/fabric/tls/server.crt
+      file: ${RUNTIME_TLS_DIR}/server.crt
 
     key:
-      file: /etc/hyperledger/fabric/tls/server.key
+      file: ${RUNTIME_TLS_DIR}/server.key
 
     rootcert:
-      file: /etc/hyperledger/fabric/tls/ca.crt
+      file: ${RUNTIME_TLS_DIR}/ca.crt
 
   authentication:
     timewindow: 15m
 
+# ============================================================
+# BCCSP
+# ============================================================
+
 BCCSP:
+
   Default: SW
 
   SW:
@@ -189,13 +223,31 @@ BCCSP:
     Security: 256
 
     FileKeyStore:
-      KeyStore: /etc/hyperledger/fabric/msp/keystore
+      KeyStore: ${RUNTIME_MSP_DIR}/keystore
+
+# ============================================================
+# Chaincode
+#
+# Fabric 2.5 legacy Docker chaincode builder.
+#
+# The peer talks to Docker through /var/run/docker.sock.
+# ============================================================
 
 vm:
   endpoint: unix:///var/run/docker.sock
 
 chaincode:
+
   mode: net
+
+  # THIS WAS MISSING.
+  # Without it Fabric reports:
+  # "No image provided and chaincode.builder default does not exist"
+  builder: ${CHAINCODE_BUILDER}
+
+  # Node chaincode runtime.
+  node:
+    runtime: ${CHAINCODE_NODE_RUNTIME}
 
   system:
     _lifecycle: enable
@@ -203,30 +255,54 @@ chaincode:
     lscc: enable
     qscc: enable
 
+  installTimeout: 300s
+  startuptimeout: 300s
+  executetimeout: 30s
+
+# ============================================================
+# Operations
+# ============================================================
+
 operations:
+
   listenAddress: 0.0.0.0:9443
+
   tls:
     enabled: false
+
+# ============================================================
+# Metrics
+# ============================================================
 
 metrics:
   provider: prometheus
 EOF
 
+# ============================================================
+# Validate generated configuration
+# ============================================================
+
+if [ ! -s "${CORE_CONFIG}" ]; then
+    echo "ERROR: core.yaml was not generated."
+    exit 1
+fi
+
 echo
 echo "Generated:"
 echo "  ${CORE_CONFIG}"
-
 echo
+
 echo "Runtime paths:"
 echo "  MSP     : ${RUNTIME_MSP_DIR}"
 echo "  TLS     : ${RUNTIME_TLS_DIR}"
 echo "  Ledger  : ${RUNTIME_LEDGER_DIR}"
-
 echo
+
 echo "Chaincode:"
-echo "  Builder : hyperledger/fabric-ccenv:2.5"
-
+echo "  Builder : ${CHAINCODE_BUILDER}"
+echo "  Node    : ${CHAINCODE_NODE_RUNTIME}"
 echo
+
 echo "BCCSP:"
 echo "  Default : SW"
 echo "  Hash    : SHA2"
