@@ -4,72 +4,43 @@ const { Contract } = require('fabric-contract-api');
 
 class LoggingContract extends Contract {
 
-    async StoreLog(ctx, payload) {
-        if (payload === undefined || payload === null || payload === '') {
-            throw new Error('StoreLog requires a payload');
+    async StoreLog(ctx, ...args) {
+        if (args.length === 0) {
+            throw new Error('StoreLog requires log data');
         }
 
-        const transactionId = ctx.stub.getTxID();
+        const txId = ctx.stub.getTxID();
 
         const record = {
-            transactionId,
-            payload
+            txId,
+            timestamp: new Date().toISOString(),
+            args
         };
 
         await ctx.stub.putState(
-            transactionId,
+            txId,
             Buffer.from(JSON.stringify(record))
         );
 
-        return transactionId;
+        return JSON.stringify(record);
     }
 
-    async GetLog(ctx, transactionId) {
-        if (!transactionId) {
-            throw new Error('transactionId is required');
-        }
-
-        const data = await ctx.stub.getState(transactionId);
+    async GetLog(ctx, txId) {
+        const data = await ctx.stub.getState(txId);
 
         if (!data || data.length === 0) {
-            throw new Error(
-                `Log ${transactionId} does not exist`
-            );
+            throw new Error(`Log ${txId} does not exist`);
         }
 
         return data.toString();
     }
 
-    async GetAllLogs(ctx) {
-        const iterator = await ctx.stub.getStateByRange('', '');
-        const logs = [];
-
-        try {
-            while (true) {
-                const result = await iterator.next();
-
-                if (result.value && result.value.value) {
-                    logs.push(
-                        JSON.parse(
-                            result.value.value.toString('utf8')
-                        )
-                    );
-                }
-
-                if (result.done) {
-                    break;
-                }
-            }
-        } finally {
-            await iterator.close();
-        }
-
-        return JSON.stringify(logs);
+    async LogExists(ctx, txId) {
+        const data = await ctx.stub.getState(txId);
+        return data && data.length > 0;
     }
 }
 
 module.exports = {
-    contracts: [
-        LoggingContract
-    ]
+    LoggingContract
 };

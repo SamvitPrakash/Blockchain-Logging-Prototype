@@ -35,11 +35,26 @@ HOST_PEER_STATE_DIR="$BUILD_DIR/peer"
 
 VNF_NAME="fabric-enroll-${INSTANCE}"
 VNF_CONTAINER="fabric-enroll-${INSTANCE}"
+
 PEER_NAME="fabric-peer-${INSTANCE}"
+PEER_ID="${PEER_NAME}"
+PEER_HOSTNAME="${PEER_NAME}"
 
 XIT_NETWORK="XIT"
 VNF_XIT_IP="10.10.0.$((50 + INSTANCE))"
 PEER_IP="10.10.0.$((100 + INSTANCE))"
+
+# ============================================================
+# Fabric configuration
+# ============================================================
+
+CORE_LOCALMSPID="Org1MSP"
+
+PEER_SECRET="peerpw"
+
+PEER_STATE_DIR="/opt/fabric-enroll-state/peer"
+
+CA_IP="10.10.0.11"
 
 # ============================================================
 # Host ownership
@@ -47,17 +62,6 @@ PEER_IP="10.10.0.$((100 + INSTANCE))"
 
 HOST_UID="$(id -u)"
 HOST_GID="$(id -g)"
-
-# ============================================================
-# Peer configuration
-# ============================================================
-
-PEER_SECRET="peerpw"
-PEER_HOSTNAME="${PEER_NAME}"
-
-PEER_STATE_DIR="/opt/fabric-enroll-state/peer"
-
-CA_IP="10.10.0.11"
 
 # ============================================================
 # Validation
@@ -152,10 +156,13 @@ services:
       XIT_NETWORK: "${XIT_NETWORK}"
 
       PEER_NAME: "${PEER_NAME}"
+      PEER_ID: "${PEER_ID}"
       PEER_SECRET: "${PEER_SECRET}"
       PEER_HOSTNAME: "${PEER_HOSTNAME}"
       PEER_IP: "${PEER_IP}"
       PEER_STATE_DIR: "${PEER_STATE_DIR}"
+
+      CORE_LOCALMSPID: "${CORE_LOCALMSPID}"
 
       CA_IP: "${CA_IP}"
 
@@ -167,7 +174,6 @@ services:
       - ${BUILD_DIR}:/opt/fabric-enroll-state
 
     networks:
-
       xit:
         ipv4_address: ${VNF_XIT_IP}
 
@@ -189,11 +195,14 @@ services:
     environment:
       FABRIC_CFG_PATH: "/etc/hyperledger/fabric"
 
-      CORE_PEER_ID: "${PEER_NAME}"
+      CORE_PEER_ID: "${PEER_ID}"
       CORE_PEER_ADDRESS: "${PEER_HOSTNAME}:7051"
       CORE_PEER_LISTENADDRESS: "0.0.0.0:7051"
 
-      CORE_PEER_LOCALMSPID: "Org1MSP"
+      CORE_PEER_CHAINCODEADDRESS: "${PEER_HOSTNAME}:7052"
+      CORE_PEER_CHAINCODELISTENADDRESS: "0.0.0.0:7052"
+
+      CORE_PEER_LOCALMSPID: "${CORE_LOCALMSPID}"
       CORE_PEER_MSPCONFIGPATH: "/etc/hyperledger/fabric/msp"
 
       CORE_PEER_TLS_ENABLED: "true"
@@ -202,8 +211,13 @@ services:
       CORE_PEER_TLS_ROOTCERT_FILE: "/etc/hyperledger/fabric/tls/ca.crt"
 
     volumes:
+      # Generated peer configuration and identities
       - ${HOST_PEER_STATE_DIR}:/etc/hyperledger/fabric:rw
+
+      # Fabric ledger/production state
       - ${HOST_PEER_STATE_DIR}/production:/var/hyperledger/production:rw
+
+      # Docker socket for chaincode containers
       - /var/run/docker.sock:/var/run/docker.sock
 
     command:
@@ -216,6 +230,10 @@ services:
         ipv4_address: ${PEER_IP}
 
     restart: unless-stopped
+
+# ============================================================
+# Network
+# ============================================================
 
 networks:
 
@@ -238,10 +256,12 @@ docker exec \
     -e VNF_NAME="${VNF_NAME}" \
     -e VNF_STATE_DIR="/opt/fabric-enroll-state" \
     -e PEER_NAME="${PEER_NAME}" \
+    -e PEER_ID="${PEER_ID}" \
     -e PEER_SECRET="${PEER_SECRET}" \
     -e PEER_HOSTNAME="${PEER_HOSTNAME}" \
     -e PEER_IP="${PEER_IP}" \
     -e PEER_STATE_DIR="${PEER_STATE_DIR}" \
+    -e CORE_LOCALMSPID="${CORE_LOCALMSPID}" \
     -e CA_IP="${CA_IP}" \
     "${VNF_CONTAINER}" \
     /opt/fabric-enroll/register-peer.sh
@@ -261,10 +281,12 @@ docker exec \
     -e VNF_NAME="${VNF_NAME}" \
     -e VNF_STATE_DIR="/opt/fabric-enroll-state" \
     -e PEER_NAME="${PEER_NAME}" \
+    -e PEER_ID="${PEER_ID}" \
     -e PEER_SECRET="${PEER_SECRET}" \
     -e PEER_HOSTNAME="${PEER_HOSTNAME}" \
     -e PEER_IP="${PEER_IP}" \
     -e PEER_STATE_DIR="${PEER_STATE_DIR}" \
+    -e CORE_LOCALMSPID="${CORE_LOCALMSPID}" \
     -e CA_IP="${CA_IP}" \
     -e HOST_UID="${HOST_UID}" \
     -e HOST_GID="${HOST_GID}" \
@@ -307,26 +329,9 @@ echo "  XIT IP     : ${VNF_XIT_IP}"
 echo
 echo "Fabric peer:"
 echo "  Name       : ${PEER_NAME}"
-echo "  Hostname   : ${PEER_HOSTNAME}"
+echo "  ID         : ${PEER_ID}"
 echo "  XIT IP     : ${PEER_IP}"
 echo
-echo "State:"
-echo "  Container  : ${PEER_STATE_DIR}"
-echo "  Host       : ${HOST_PEER_STATE_DIR}"
-echo
-echo "Host:"
-echo "  UID        : ${HOST_UID}"
-echo "  GID        : ${HOST_GID}"
-echo
-echo "Generated:"
-echo "  ${BUILD_DIR}/compose.yaml"
-echo "  ${BUILD_DIR}/register-peer.sh"
-echo "  ${BUILD_DIR}/enroll-peer.sh"
-echo "  ${BUILD_DIR}/start-peer.sh"
-echo
-echo "Start FABRIC-ENROLL with:"
-echo
-echo "  docker compose -f ${BUILD_DIR}/compose.yaml up -d"
-echo
-echo "The peer will start automatically after enrollment succeeds."
+echo "Build:"
+echo "  ${BUILD_DIR}"
 echo

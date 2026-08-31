@@ -2,91 +2,138 @@
 
 set -euo pipefail
 
+# ============================================================
+# Fabric Peer Configuration Preparation
+# ============================================================
+
 : "${PEER_NAME:?PEER_NAME is required}"
 : "${PEER_HOSTNAME:?PEER_HOSTNAME is required}"
+: "${PEER_IP:?PEER_IP is required}"
 : "${PEER_STATE_DIR:?PEER_STATE_DIR is required}"
 
-MSP_DIR="${PEER_STATE_DIR}/msp"
-TLS_DIR="${PEER_STATE_DIR}/tls"
+CORE_LOCALMSPID="${CORE_LOCALMSPID:-Org1MSP}"
+PEER_ID="${PEER_ID:-${PEER_NAME}}"
+
+# ------------------------------------------------------------
+# Host/enrollment paths
+#
+# These paths are used ONLY while preparing the state.
+# They must NOT be written into core.yaml because the peer
+# container sees the state directory at /etc/hyperledger/fabric.
+# ------------------------------------------------------------
+
+PEER_MSP_DIR="${PEER_STATE_DIR}/msp"
+PEER_TLS_DIR="${PEER_STATE_DIR}/tls"
 CORE_CONFIG="${PEER_STATE_DIR}/core.yaml"
-PRODUCTION_DIR="${PEER_STATE_DIR}/production"
+
+# ------------------------------------------------------------
+# Runtime paths as seen from fabric-peer-1
+# ------------------------------------------------------------
+
+RUNTIME_ROOT="/etc/hyperledger/fabric"
+RUNTIME_MSP_DIR="${RUNTIME_ROOT}/msp"
+RUNTIME_TLS_DIR="${RUNTIME_ROOT}/tls"
+RUNTIME_LEDGER_DIR="/var/hyperledger/production"
 
 echo "=============================================="
-echo " Preparing Fabric peer"
+echo " Preparing Fabric peer configuration"
 echo "=============================================="
 echo
-echo "Peer              : ${PEER_NAME}"
-echo "Hostname          : ${PEER_HOSTNAME}"
-echo "Peer state        : ${PEER_STATE_DIR}"
+echo "Peer ID              : ${PEER_ID}"
+echo "Peer address         : ${PEER_HOSTNAME}:7051"
+echo "Chaincode address    : ${PEER_HOSTNAME}:7052"
+echo "Local MSP ID         : ${CORE_LOCALMSPID}"
+echo "MSP path             : ${PEER_MSP_DIR}"
+echo "State directory      : ${PEER_STATE_DIR}"
 echo
 
-if [ ! -d "${PEER_STATE_DIR}" ]; then
-    echo "Error: peer state directory does not exist:"
-    echo "  ${PEER_STATE_DIR}"
+# ============================================================
+# Validate peer identity
+# ============================================================
+
+if [ ! -f "${PEER_MSP_DIR}/signcerts/cert.pem" ]; then
+    echo "ERROR: Peer MSP certificate not found:"
+    echo "  ${PEER_MSP_DIR}/signcerts/cert.pem"
     exit 1
 fi
 
-if [ ! -d "${MSP_DIR}" ]; then
-    echo "Error: MSP directory does not exist:"
-    echo "  ${MSP_DIR}"
+if [ ! -f "${PEER_MSP_DIR}/config.yaml" ]; then
+    echo "ERROR: Peer MSP config not found:"
+    echo "  ${PEER_MSP_DIR}/config.yaml"
     exit 1
 fi
 
-if [ ! -d "${MSP_DIR}/signcerts" ]; then
-    echo "Error: MSP signcerts directory does not exist:"
-    echo "  ${MSP_DIR}/signcerts"
+if [ ! -f "${PEER_TLS_DIR}/signcerts/cert.pem" ]; then
+    echo "ERROR: Peer TLS certificate not found:"
+    echo "  ${PEER_TLS_DIR}/signcerts/cert.pem"
     exit 1
 fi
 
-if ! find "${MSP_DIR}/signcerts" \
-    -type f \
-    -name '*.pem' \
-    -print \
-    -quit | grep -q .
-then
-    echo "Error: no MSP signer certificate found."
+# ============================================================
+# Locate TLS material
+# ============================================================
+
+TLS_CERT="${PEER_TLS_DIR}/signcerts/cert.pem"
+
+TLS_CA="$(
+    find "${PEER_TLS_DIR}/tlscacerts" \
+        -maxdepth 1 \
+        -type f \
+        -name '*.pem' \
+        -print -quit 2>/dev/null || true
+)"
+
+TLS_KEY="$(
+    find "${PEER_TLS_DIR}/keystore" \
+        -maxdepth 1 \
+        -type f \
+        -print -quit 2>/dev/null || true
+)"
+
+if [ -z "${TLS_CA}" ]; then
+    echo "ERROR: TLS CA certificate not found."
     exit 1
 fi
 
-if [ ! -d "${MSP_DIR}/keystore" ]; then
-    echo "Error: MSP keystore directory does not exist:"
-    echo "  ${MSP_DIR}/keystore"
+if [ -z "${TLS_KEY}" ]; then
+    echo "ERROR: TLS private key not found."
     exit 1
 fi
 
-if ! find "${MSP_DIR}/keystore" \
-    -type f \
-    -name '*_sk' \
-    -print \
-    -quit | grep -q .
-then
-    echo "Error: no MSP private key found."
-    exit 1
-fi
+# ============================================================
+# Create Fabric-compatible TLS files
+# ============================================================
 
-if [ ! -f "${MSP_DIR}/config.yaml" ]; then
-    echo "Error: MSP config.yaml does not exist:"
-    echo "  ${MSP_DIR}/config.yaml"
-    exit 1
-fi
+cp "${TLS_CERT}" "${PEER_TLS_DIR}/server.crt"
+cp "${TLS_KEY}"  "${PEER_TLS_DIR}/server.key"
+cp "${TLS_CA}"   "${PEER_TLS_DIR}/ca.crt"
 
-if [ ! -d "${TLS_DIR}" ]; then
-    echo "Error: TLS directory does not exist:"
-    echo "  ${TLS_DIR}"
-    exit 1
-fi
+chmod 644 "${PEER_TLS_DIR}/server.crt"
+chmod 600 "${PEER_TLS_DIR}/server.key"
+chmod 644 "${PEER_TLS_DIR}/ca.crt"
 
-for file in server.crt server.key ca.crt; do
-    if [ ! -f "${TLS_DIR}/${file}" ]; then
-        echo "Error: missing TLS file:"
-        echo "  ${TLS_DIR}/${file}"
-        exit 1
-    fi
-done
+# ============================================================
+# Create peer directories
+# ============================================================
 
-mkdir -p "${PRODUCTION_DIR}"
+mkdir -p \
+    "${PEER_STATE_DIR}/ledger" \
+    "${PEER_STATE_DIR}/production" \
+    "${PEER_MSP_DIR}/keystore"
+
+# ============================================================
+# Generate core.yaml
+#
+# IMPORTANT:
+# Every path below is a PATH INSIDE fabric-peer-1.
+# ============================================================
 
 cat > "${CORE_CONFIG}" <<EOF
+# ============================================================
+# Hyperledger Fabric Peer Configuration
+# Generated by FABRIC-ENROLL
+# ============================================================
+
 peer:
   id: ${PEER_NAME}
   networkId: dev
@@ -116,7 +163,6 @@ peer:
 
   mspConfigPath: /etc/hyperledger/fabric/msp
   localMspId: Org1MSP
-
   fileSystemPath: /var/hyperledger/production
 
   tls:
@@ -132,18 +178,18 @@ peer:
     rootcert:
       file: /etc/hyperledger/fabric/tls/ca.crt
 
-  BCCSP:
-    Default: SW
-
-    SW:
-      Hash: SHA2
-      Security: 256
-
-      FileKeyStore:
-        KeyStore: /etc/hyperledger/fabric/msp/keystore
-
   authentication:
     timewindow: 15m
+
+BCCSP:
+  Default: SW
+
+  SW:
+    Hash: SHA2
+    Security: 256
+
+    FileKeyStore:
+      KeyStore: /etc/hyperledger/fabric/msp/keystore
 
 vm:
   endpoint: unix:///var/run/docker.sock
@@ -161,12 +207,33 @@ operations:
   listenAddress: 0.0.0.0:9443
   tls:
     enabled: false
+
+metrics:
+  provider: prometheus
 EOF
 
 echo
-echo "Peer configuration generated:"
+echo "Generated:"
 echo "  ${CORE_CONFIG}"
+
+echo
+echo "Runtime paths:"
+echo "  MSP     : ${RUNTIME_MSP_DIR}"
+echo "  TLS     : ${RUNTIME_TLS_DIR}"
+echo "  Ledger  : ${RUNTIME_LEDGER_DIR}"
+
+echo
+echo "Chaincode:"
+echo "  Builder : hyperledger/fabric-ccenv:2.5"
+
+echo
+echo "BCCSP:"
+echo "  Default : SW"
+echo "  Hash    : SHA2"
+echo "  Security: 256"
+echo "  KeyStore: ${RUNTIME_MSP_DIR}/keystore"
+
 echo
 echo "=============================================="
-echo " Fabric peer preparation complete"
+echo " Peer configuration ready"
 echo "=============================================="

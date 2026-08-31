@@ -2,191 +2,199 @@
 
 set -euo pipefail
 
-# ============================================================
-# VNFM Identity Provisioning
-# ============================================================
+OUTPUT_DIR="${1:?Missing output directory}"
+CA_ENDPOINT="${2:?Missing CA endpoint}"
+CLIENT_IDENTITY="${3:?Missing client identity}"
+CLIENT_PASSWORD="${4:?Missing client password}"
+ADMIN_IDENTITY="${5:?Missing admin identity}"
+ADMIN_PASSWORD="${6:?Missing admin password}"
+CA_CLIENT_IMAGE="${7:-hyperledger/fabric-ca:1.5.15}"
 
-OUTPUT_DIR="${1:?Output directory is required}"
-CA_ENDPOINT="${2:?CA endpoint is required}"
-IDENTITY_NAME="${3:?Identity name is required}"
-IDENTITY_PASSWORD="${4:?Identity password is required}"
+CLIENT_HOME="/tmp/fabric-ca-client"
 
-ADMIN_MSP_DIR="${OUTPUT_DIR}/msp"
-CLIENT_DIR="${OUTPUT_DIR}/client"
-
-CA_ADMIN_HOME="${CLIENT_DIR}/ca-admin"
-VNFM_CLIENT_HOME="${CLIENT_DIR}/vnfm"
-
-# ============================================================
-# Validation
-# ============================================================
-
-if [ -z "$OUTPUT_DIR" ] || [ -z "$CA_ENDPOINT" ]; then
-    echo "ERROR: invalid identity provisioning arguments."
-    exit 1
-fi
-
+rm -rf "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
 
-# ============================================================
-# Clean previous generated identity
-# ============================================================
-
-rm -rf "$ADMIN_MSP_DIR"
-rm -rf "$CA_ADMIN_HOME"
-rm -rf "$VNFM_CLIENT_HOME"
-
-mkdir -p \
-    "$CA_ADMIN_HOME" \
-    "$VNFM_CLIENT_HOME" \
-    "$ADMIN_MSP_DIR"
-
-# ============================================================
-# Fabric CA client configuration
-# ============================================================
-
-export FABRIC_CA_CLIENT_HOME="$CA_ADMIN_HOME"
-
-# ============================================================
-# Enroll CA administrator
-# ============================================================
-
 echo
 echo "=============================================="
-echo " Registering VNFM"
+echo " Registering VNFM identities"
 echo "=============================================="
 echo
 
-echo "VNFM:"
-echo "  ${IDENTITY_NAME}"
+docker run --rm \
+    --network XIT \
+    -v "${OUTPUT_DIR}:/output" \
+    "$CA_CLIENT_IMAGE" \
+    sh -c "
+        set -e
 
-echo "CA:"
-echo "  ${CA_ENDPOINT}"
+        export FABRIC_CA_CLIENT_HOME='${CLIENT_HOME}'
 
-echo "State:"
-echo "  ${OUTPUT_DIR}"
+        rm -rf '${CLIENT_HOME}'
+        mkdir -p '${CLIENT_HOME}'
 
-echo
-echo "Enrolling CA administrator..."
+        echo 'Enrolling CA administrator...'
 
-fabric-ca-client enroll \
-    -u "http://admin:adminpw@${CA_ENDPOINT}" \
-    --caname ca-fabric \
-    --tls.certfiles "$CA_ADMIN_HOME/msp/cacerts/"*.pem
+        fabric-ca-client enroll \
+            -u 'http://admin:adminpw@${CA_ENDPOINT}' \
+            --caname ca
 
-# ============================================================
-# Register VNFM as an administrative identity
-# ============================================================
+        # ====================================================
+        # VNFM client identity
+        #
+        # Used by osnadmin for the orderer Admin API.
+        # ====================================================
 
-echo
-echo "Registering VNFM administrative identity..."
+        echo
+        echo 'Registering VNFM client identity...'
 
-fabric-ca-client register \
-    --caname ca-fabric \
-    --id.name "$IDENTITY_NAME" \
-    --id.secret "$IDENTITY_PASSWORD" \
-    --id.type admin \
-    --id.affiliation org1
+        fabric-ca-client register \
+            --id.name '${CLIENT_IDENTITY}' \
+            --id.secret '${CLIENT_PASSWORD}' \
+            --id.affiliation org1 \
+            --id.type client \
+            -u 'http://${CA_ENDPOINT}'
 
-# ============================================================
-# Enroll VNFM identity
-# ============================================================
+        echo
+        echo 'Enrolling VNFM client identity...'
 
-echo
-echo "=============================================="
-echo " Enrolling VNFM administrator"
-echo "=============================================="
-echo
+        CLIENT_HOME_DIR='${CLIENT_HOME}/vnfm-client'
 
-export FABRIC_CA_CLIENT_HOME="$VNFM_CLIENT_HOME"
+        mkdir -p \"\$CLIENT_HOME_DIR\"
 
-fabric-ca-client enroll \
-    -u "http://${IDENTITY_NAME}:${IDENTITY_PASSWORD}@${CA_ENDPOINT}" \
-    --caname ca-fabric \
-    -M "$ADMIN_MSP_DIR" \
-    --csr.cn "$IDENTITY_NAME" \
-    --csr.names "C=ZA,ST=Gauteng,L=Johannesburg,O=Org1,OU=ADMIN" \
-    --tls.certfiles "$CA_ADMIN_HOME/msp/cacerts/"*.pem
+        fabric-ca-client enroll \
+            -u 'http://${CLIENT_IDENTITY}:${CLIENT_PASSWORD}@${CA_ENDPOINT}' \
+            --caname ca \
+            --home \"\$CLIENT_HOME_DIR\" \
+            -M /output/client-msp
 
-# ============================================================
-# Configure NodeOUs
-#
-# The peer enrollment flow in this repository requires the
-# admin OU to be explicitly represented in config.yaml.
-# ============================================================
+        CLIENT_CERT='/output/client-msp/signcerts/cert.pem'
+        CLIENT_KEY=\$(find /output/client-msp/keystore -type f -print -quit)
+        CA_CERT=\$(find /output/client-msp/cacerts -type f -print -quit)
 
-CA_CERT_NAME="$(basename "$ADMIN_MSP_DIR/cacerts/"*.pem)"
+        test -s \"\$CLIENT_CERT\"
+        test -n \"\$CLIENT_KEY\"
+        test -s \"\$CLIENT_KEY\"
+        test -n \"\$CA_CERT\"
+        test -s \"\$CA_CERT\"
 
-cat > "$ADMIN_MSP_DIR/config.yaml" <<EOF
+        cp \"\$CLIENT_CERT\" /output/client.crt
+        cp \"\$CLIENT_KEY\" /output/client.key
+        cp \"\$CA_CERT\" /output/ca.crt
+
+        # ====================================================
+        # VNFM administrative identity
+        #
+        # This is separate from the client identity.
+        # ====================================================
+
+        echo
+        echo 'Registering VNFM admin identity...'
+
+        fabric-ca-client register \
+            --id.name '${ADMIN_IDENTITY}' \
+            --id.secret '${ADMIN_PASSWORD}' \
+            --id.affiliation org1 \
+            --id.type admin \
+            -u 'http://${CA_ENDPOINT}'
+
+        echo
+        echo 'Enrolling VNFM admin identity...'
+
+        ADMIN_HOME_DIR='${CLIENT_HOME}/vnfm-admin'
+
+        mkdir -p \"\$ADMIN_HOME_DIR\"
+
+        fabric-ca-client enroll \
+            -u 'http://${ADMIN_IDENTITY}:${ADMIN_PASSWORD}@${CA_ENDPOINT}' \
+            --caname ca \
+            --home \"\$ADMIN_HOME_DIR\" \
+            -M /output/admin-msp \
+            --csr.cn '${ADMIN_IDENTITY}'
+
+        ADMIN_CA_CERT=\$(find /output/admin-msp/cacerts -type f -print -quit)
+
+        test -n \"\$ADMIN_CA_CERT\"
+        test -s \"\$ADMIN_CA_CERT\"
+
+        # ====================================================
+        # NodeOUs
+        # ====================================================
+
+        cat > /output/admin-msp/config.yaml <<EOF
 NodeOUs:
   Enable: true
 
   ClientOUIdentifier:
-    Certificate: cacerts/${CA_CERT_NAME}
+    Certificate: cacerts/\$(basename \"\$ADMIN_CA_CERT\")
     OrganizationalUnitIdentifier: client
 
   PeerOUIdentifier:
-    Certificate: cacerts/${CA_CERT_NAME}
+    Certificate: cacerts/\$(basename \"\$ADMIN_CA_CERT\")
     OrganizationalUnitIdentifier: peer
 
   AdminOUIdentifier:
-    Certificate: cacerts/${CA_CERT_NAME}
+    Certificate: cacerts/\$(basename \"\$ADMIN_CA_CERT\")
     OrganizationalUnitIdentifier: admin
 
   OrdererOUIdentifier:
-    Certificate: cacerts/${CA_CERT_NAME}
+    Certificate: cacerts/\$(basename \"\$ADMIN_CA_CERT\")
     OrganizationalUnitIdentifier: orderer
 EOF
 
-# ============================================================
-# Copy CA certificate into standard MSP structure
-# ============================================================
+        # ====================================================
+        # Standard MSP structure
+        # ====================================================
 
-mkdir -p "$ADMIN_MSP_DIR/tlscacerts"
+        mkdir -p /output/admin-msp/tlscacerts
 
-cp \
-    "$ADMIN_MSP_DIR/cacerts/"*.pem \
-    "$ADMIN_MSP_DIR/tlscacerts/ca.crt"
+        cp \"\$ADMIN_CA_CERT\" \
+           /output/admin-msp/tlscacerts/ca.crt
 
-# ============================================================
-# Verify identity
-# ============================================================
+        chmod 600 /output/client.key
 
-if [ ! -f "$ADMIN_MSP_DIR/signcerts/cert.pem" ]; then
-    echo
-    echo "ERROR: VNFM administrator certificate was not generated."
+        chmod 644 \
+            /output/client.crt \
+            /output/ca.crt
+
+        echo
+        echo 'VNFM identities generated successfully.'
+    "
+
+# ------------------------------------------------------------
+# Validate client credentials
+# ------------------------------------------------------------
+
+test -s "$OUTPUT_DIR/client.crt"
+test -s "$OUTPUT_DIR/client.key"
+test -s "$OUTPUT_DIR/ca.crt"
+
+# ------------------------------------------------------------
+# Validate admin MSP
+# ------------------------------------------------------------
+
+test -s "$OUTPUT_DIR/admin-msp/signcerts/cert.pem"
+test -s "$OUTPUT_DIR/admin-msp/config.yaml"
+
+ADMIN_KEY="$(find "$OUTPUT_DIR/admin-msp/keystore" -type f -print -quit)"
+
+if [ -z "$ADMIN_KEY" ] || [ ! -s "$ADMIN_KEY" ]; then
+    echo "Error: VNFM admin private key was not generated."
     exit 1
 fi
-
-if [ ! -d "$ADMIN_MSP_DIR/keystore" ]; then
-    echo
-    echo "ERROR: VNFM administrator keystore was not generated."
-    exit 1
-fi
-
-if [ ! -f "$ADMIN_MSP_DIR/config.yaml" ]; then
-    echo
-    echo "ERROR: VNFM administrator MSP config.yaml was not generated."
-    exit 1
-fi
-
-# ============================================================
-# Finished
-# ============================================================
 
 echo
 echo "=============================================="
-echo " VNFM identity provisioned"
+echo " VNFM identities ready"
 echo "=============================================="
 echo
 
-echo "Identity:"
-echo "  ${IDENTITY_NAME}"
+echo "Client:"
+echo "  $OUTPUT_DIR/client.crt"
+echo "  $OUTPUT_DIR/client.key"
 
-echo "Type:"
-echo "  admin"
-
-echo "MSP:"
-echo "  ${ADMIN_MSP_DIR}"
+echo
+echo "Admin MSP:"
+echo "  $OUTPUT_DIR/admin-msp"
 
 echo
