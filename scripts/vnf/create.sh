@@ -28,6 +28,8 @@ PROJECT_ROOT="$(realpath "$SCRIPT_DIR/../..")"
 BUILD_DIR="$PROJECT_ROOT/build/vnf-${INSTANCE}"
 TEMPLATE_DIR="$PROJECT_ROOT/templates/vnf"
 
+VNF_STATE_DIR="$BUILD_DIR/state"
+
 # ============================================================
 # Instance configuration
 # ============================================================
@@ -42,11 +44,8 @@ OAM_NETWORK="OAM-${INSTANCE}"
 XIT_NETWORK="XIT"
 
 VNF_OAM_IP="10.20.${INSTANCE}.3"
+VNF_XIT_IP="10.10.0.$((150 + INSTANCE))"
 
-# Fabric peer addressing follows the existing XIT allocation:
-# peer 1 = 10.10.0.101
-# peer 2 = 10.10.0.102
-# ...
 FABRIC_PEER_IP="10.10.0.$((100 + INSTANCE))"
 
 # ============================================================
@@ -54,6 +53,19 @@ FABRIC_PEER_IP="10.10.0.$((100 + INSTANCE))"
 # ============================================================
 
 GNB_LOG_VOLUME="gnb-${INSTANCE}-logs"
+
+# ============================================================
+# Fabric CA
+# ============================================================
+
+FABRIC_CA_IP="10.10.0.11"
+FABRIC_CA_PORT="7054"
+
+# ============================================================
+# VNF credentials
+# ============================================================
+
+VNF_SECRET="vnfpw"
 
 # ============================================================
 # Validation
@@ -64,6 +76,21 @@ if [ ! -d "$TEMPLATE_DIR" ]; then
     echo "  $TEMPLATE_DIR"
     exit 1
 fi
+
+for file in \
+    Dockerfile \
+    entrypoint.sh \
+    register-vnf.sh \
+    enroll-vnf.sh \
+    requirements.txt \
+    src/main.py
+do
+    if [ ! -f "$TEMPLATE_DIR/$file" ]; then
+        echo "Error: VNF template file not found:"
+        echo "  $TEMPLATE_DIR/$file"
+        exit 1
+    fi
+done
 
 if ! docker network inspect "$OAM_NETWORK" >/dev/null 2>&1; then
     echo "Error: OAM network '${OAM_NETWORK}' does not exist."
@@ -98,7 +125,7 @@ fi
 # Prepare build directory
 # ============================================================
 
-mkdir -p "$BUILD_DIR"
+mkdir -p "$VNF_STATE_DIR"
 
 # ============================================================
 # Generate Compose
@@ -117,18 +144,26 @@ services:
     environment:
       VNF_ID: ${VNF_ID}
       GNB_ID: ${GNB_ID}
+      VNF_STATE_DIR: /opt/vnf-state
+
       FABRIC_PEER: ${FABRIC_PEER}
       FABRIC_PEER_IP: ${FABRIC_PEER_IP}
 
+      FABRIC_CA_IP: ${FABRIC_CA_IP}
+      FABRIC_CA_PORT: ${FABRIC_CA_PORT}
+
+      VNF_SECRET: ${VNF_SECRET}
+
     volumes:
       - ${GNB_LOG_VOLUME}:/mnt/gnb-logs:ro
+      - ${VNF_STATE_DIR}:/opt/vnf-state
 
     networks:
       oam:
         ipv4_address: ${VNF_OAM_IP}
 
       xit:
-        ipv4_address: 10.10.0.$((150 + INSTANCE))
+        ipv4_address: ${VNF_XIT_IP}
 
 networks:
   oam:
@@ -166,15 +201,22 @@ echo "  VNF IP       : ${VNF_OAM_IP}"
 echo
 echo "XIT:"
 echo "  Network      : ${XIT_NETWORK}"
-echo "  VNF IP       : 10.10.0.$((150 + INSTANCE))"
+echo "  VNF IP       : ${VNF_XIT_IP}"
 echo
 echo "Fabric:"
 echo "  Peer         : ${FABRIC_PEER}"
 echo "  Peer IP      : ${FABRIC_PEER_IP}"
 echo
+echo "Fabric CA:"
+echo "  Address      : ${FABRIC_CA_IP}:${FABRIC_CA_PORT}"
+echo
 echo "Logs:"
 echo "  Volume       : ${GNB_LOG_VOLUME}"
 echo "  Mount        : /mnt/gnb-logs (read-only)"
+echo
+echo "VNF state:"
+echo "  Host         : ${VNF_STATE_DIR}"
+echo "  Container    : /opt/vnf-state"
 echo
 echo "Generated:"
 echo "  ${BUILD_DIR}/compose.yaml"

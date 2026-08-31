@@ -8,7 +8,7 @@ def main():
     fabric_peer = os.getenv("FABRIC_PEER", "unknown")
 
     print("==============================================")
-    print(" VNF starting")
+    print(" VNF starting SAMMY")
     print("==============================================")
     print(f"VNF ID       : {vnf_id}")
     print(f"gNB ID       : {gnb_id}")

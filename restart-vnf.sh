@@ -4,4 +4,4 @@ rm -rf build/vnf-1
 
 ./scripts/vnf/create.sh 1
 
-docker compose -f build/vnf-1/compose.yaml up -d
+docker compose -f build/vnf-1/compose.yaml up -d --build
