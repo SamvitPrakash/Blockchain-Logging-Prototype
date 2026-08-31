@@ -50,6 +50,12 @@ VNF_OAM_IP="10.20.${INSTANCE}.3"
 FABRIC_PEER_IP="10.10.0.$((100 + INSTANCE))"
 
 # ============================================================
+# Log volume
+# ============================================================
+
+GNB_LOG_VOLUME="gnb-${INSTANCE}-logs"
+
+# ============================================================
 # Validation
 # ============================================================
 
@@ -72,6 +78,13 @@ if ! docker network inspect "$XIT_NETWORK" >/dev/null 2>&1; then
     echo
     echo "Create it first with:"
     echo "  ./scripts/networks/XIT/setup-XIT.sh"
+    exit 1
+fi
+
+if ! docker volume inspect "$GNB_LOG_VOLUME" >/dev/null 2>&1; then
+    echo "Error: gNB log volume '${GNB_LOG_VOLUME}' does not exist."
+    echo
+    echo "Create the corresponding gNB instance first."
     exit 1
 fi
 
@@ -107,6 +120,9 @@ services:
       FABRIC_PEER: ${FABRIC_PEER}
       FABRIC_PEER_IP: ${FABRIC_PEER_IP}
 
+    volumes:
+      - ${GNB_LOG_VOLUME}:/mnt/gnb-logs:ro
+
     networks:
       oam:
         ipv4_address: ${VNF_OAM_IP}
@@ -122,6 +138,11 @@ networks:
   xit:
     external: true
     name: ${XIT_NETWORK}
+
+volumes:
+  ${GNB_LOG_VOLUME}:
+    external: true
+    name: ${GNB_LOG_VOLUME}
 EOF
 
 # ============================================================
@@ -150,6 +171,10 @@ echo
 echo "Fabric:"
 echo "  Peer         : ${FABRIC_PEER}"
 echo "  Peer IP      : ${FABRIC_PEER_IP}"
+echo
+echo "Logs:"
+echo "  Volume       : ${GNB_LOG_VOLUME}"
+echo "  Mount        : /mnt/gnb-logs (read-only)"
 echo
 echo "Generated:"
 echo "  ${BUILD_DIR}/compose.yaml"
