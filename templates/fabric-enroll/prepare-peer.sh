@@ -15,9 +15,9 @@ echo "=============================================="
 echo " Preparing Fabric peer"
 echo "=============================================="
 echo
-echo "Peer          : ${PEER_NAME}"
-echo "Hostname      : ${PEER_HOSTNAME}"
-echo "Peer state    : ${PEER_STATE_DIR}"
+echo "Peer              : ${PEER_NAME}"
+echo "Hostname          : ${PEER_HOSTNAME}"
+echo "Peer state        : ${PEER_STATE_DIR}"
 echo
 
 if [ ! -d "${PEER_STATE_DIR}" ]; then
@@ -86,31 +86,36 @@ done
 
 mkdir -p "${PRODUCTION_DIR}"
 
-cat > "${CORE_CONFIG}" <<YAML
+cat > "${CORE_CONFIG}" <<EOF
 peer:
-
   id: ${PEER_NAME}
-
   networkId: dev
 
   listenAddress: 0.0.0.0:7051
-
-  chaincodeListenAddress: 0.0.0.0:7052
-
-  chaincodeAddress: ${PEER_HOSTNAME}:7052
-
   address: ${PEER_HOSTNAME}:7051
-
   addressAutoDetect: false
+
+  gateway:
+    enabled: true
+    endorsementTimeout: 30s
+    broadcastTimeout: 30s
+    dialTimeout: 2m
 
   gossip:
     bootstrap: ${PEER_HOSTNAME}:7051
     externalEndpoint: ${PEER_HOSTNAME}:7051
+    endpoint: ${PEER_HOSTNAME}:7051
+    useLeaderElection: false
+    orgLeader: false
+
+  discovery:
+    enabled: true
+    authCacheEnabled: true
+    authCacheMaxSize: 1000
+    orgMembersAllowedAccess: true
 
   mspConfigPath: /etc/hyperledger/fabric/msp
-
   localMspId: Org1MSP
-
   fileSystemPath: /var/hyperledger/production
 
   tls:
@@ -136,56 +141,52 @@ peer:
       FileKeyStore:
         KeyStore: /etc/hyperledger/fabric/msp/keystore
 
-  gateway:
-    enabled: true
+  authentication:
+    timewindow: 15m
 
-  discovery:
-    enabled: true
+  handlers:
+    authFilters:
+      - name: DefaultAuth
+      - name: ExpirationCheck
+
+    decorators:
+      - name: DefaultDecorator
+
+    endorsers:
+      escc:
+        name: DefaultEndorsement
+        library:
+
+    validators:
+      vscc:
+        name: DefaultValidation
+        library:
 
 vm:
-
   endpoint: unix:///var/run/docker.sock
 
-  docker:
-    tls:
-      enabled: false
-
-    attachStdout: false
-
 chaincode:
-
   mode: net
-
-  builder: hyperledger/fabric-ccenv:2.5
-
-  pull: false
-
-  golang:
-    runtime: hyperledger/fabric-baseos:2.5
 
   system:
     _lifecycle: enable
     cscc: enable
     lscc: enable
-    escc: enable
-    vscc: enable
     qscc: enable
 
-operations:
+  executetimeout: 30s
+  keepalive: 0
 
+operations:
   listenAddress: 0.0.0.0:9443
 
   tls:
     enabled: false
-YAML
+EOF
 
 echo
 echo "Peer configuration generated:"
 echo "  ${CORE_CONFIG}"
-echo
-echo "Docker chaincode builder:"
-echo "  VM endpoint: unix:///var/run/docker.sock"
-echo "  Builder:     hyperledger/fabric-ccenv:2.5"
 echo
 echo "=============================================="
 echo " Fabric peer preparation complete"

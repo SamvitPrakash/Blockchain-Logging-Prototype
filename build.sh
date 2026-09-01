@@ -1,4 +1,4 @@
-docker rm -f fabric-bootstrap fabric-ca fabric-orderer-1 vnfm vnf-1
+docker rm -f fabric-bootstrap fabric-ca fabric-orderer-1 vnfm vnf-1 vnf-2
 docker rm -f fabric-enroll-1 fabric-peer-1
 docker rm -f fabric-enroll-2 fabric-peer-2
 # docker rm -f fabric-enroll-3 fabric-peer-3
@@ -15,10 +15,6 @@ docker rm -f fabric-enroll-2 fabric-peer-2
 rm -rf build/*
 
 ./scripts/networks/XIT/setup-XIT.sh
-./scripts/networks/OAM/create-oam-network.sh 1
-./scripts/networks/OAM/connect-oam.sh 1
-./scripts/networks/OAM/create-oam-network.sh 2
-./scripts/networks/OAM/connect-oam.sh 2
 
 ./scripts/gnb-ue/create-and-start.sh 2
 
@@ -59,6 +55,8 @@ docker compose -f build/fabric-enroll-2/compose.yaml up -d
 ./scripts/vnfm/create.sh
 
 ./scripts/vnf/create.sh 1
+./scripts/vnf/create.sh 2
 
 docker compose -f build/vnfm/compose.yaml up -d
 docker compose -f build/vnf-1/compose.yaml up -d --build
+docker compose -f build/vnf-2/compose.yaml up -d --build

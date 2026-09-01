@@ -200,7 +200,7 @@ get_package_id()
 {
     local peer="$1"
 
-    configure_peer "${peer}"
+    configure_peer "${peer}" >/dev/null
 
     peer lifecycle chaincode queryinstalled 2>/dev/null |
         awk -v label="${PACKAGE_LABEL}" '
