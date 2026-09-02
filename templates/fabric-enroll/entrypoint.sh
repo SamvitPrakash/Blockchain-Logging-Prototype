@@ -1,0 +1,65 @@
+#!/bin/bash
+
+set -euo pipefail
+
+echo "=============================================="
+echo " Starting FABRIC-ENROLL"
+echo "=============================================="
+
+echo
+echo "FABRIC-ENROLL instance : ${VNF_INSTANCE}"
+echo "FABRIC-ENROLL name     : ${VNF_NAME}"
+echo "XIT network            : ${XIT_NETWORK}"
+echo "Peer address           : ${PEER_IP}"
+echo
+
+: "${VNF_INSTANCE:?VNF_INSTANCE is required}"
+: "${VNF_STATE_DIR:?VNF_STATE_DIR is required}"
+: "${PEER_NAME:?PEER_NAME is required}"
+: "${PEER_HOSTNAME:?PEER_HOSTNAME is required}"
+: "${PEER_IP:?PEER_IP is required}"
+: "${XIT_NETWORK:?XIT_NETWORK is required}"
+: "${HOST_PEER_STATE_DIR:?HOST_PEER_STATE_DIR is required}"
+
+CA_IP="${CA_IP:-10.10.0.11}"
+CA_PORT="${CA_PORT:-7054}"
+
+echo "Waiting for Fabric CA at ${CA_IP}:${CA_PORT}..."
+until (echo >"/dev/tcp/${CA_IP}/${CA_PORT}") >/dev/null 2>&1; do
+    echo "  Fabric CA not ready, retrying..."
+    sleep 2
+done
+
+echo "Fabric CA is reachable."
+echo
+
+echo "=============================================="
+echo " Registering peer"
+echo "=============================================="
+
+/opt/fabric-enroll/register-peer.sh
+
+echo
+echo "=============================================="
+echo " Enrolling peer"
+echo "=============================================="
+
+/opt/fabric-enroll/enroll-peer.sh
+
+echo
+echo "=============================================="
+echo " Preparing peer configuration"
+echo "=============================================="
+
+/opt/fabric-enroll/prepare-peer.sh
+
+echo
+echo "=============================================="
+echo " FABRIC-ENROLL complete"
+echo "=============================================="
+echo
+echo "Peer identity and configuration have been generated."
+echo "Exiting initialization container."
+echo
+
+exit 0

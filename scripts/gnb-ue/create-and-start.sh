@@ -8,9 +8,9 @@ if [ -z "$1" ]; then
 fi
 
 for ((i=1; i<=$1; i++)); do
-    ./scripts/create-instance.sh "$i"
+    ./scripts/gnb-ue/create-instance.sh "$i"
 done
 
 for ((i=1; i<=$1; i++)); do
-    ./scripts/start-instance.sh "$i"
+    ./scripts/gnb-ue/start-instance.sh "$i"
 done
