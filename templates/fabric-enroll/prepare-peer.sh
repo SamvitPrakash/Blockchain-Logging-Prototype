@@ -92,6 +92,8 @@ peer:
   networkId: dev
 
   listenAddress: 0.0.0.0:7051
+  chaincodeListenAddress: 0.0.0.0:7052
+  chaincodeAddress: ${PEER_HOSTNAME}:7052
   address: ${PEER_HOSTNAME}:7051
   addressAutoDetect: false
 
@@ -105,7 +107,7 @@ peer:
     bootstrap: ${PEER_HOSTNAME}:7051
     externalEndpoint: ${PEER_HOSTNAME}:7051
     endpoint: ${PEER_HOSTNAME}:7051
-    useLeaderElection: false
+    useLeaderElection: true
     orgLeader: false
 
   discovery:
@@ -172,6 +174,8 @@ chaincode:
     _lifecycle: enable
     cscc: enable
     lscc: enable
+    escc: enable
+    vscc: enable
     qscc: enable
 
   executetimeout: 30s

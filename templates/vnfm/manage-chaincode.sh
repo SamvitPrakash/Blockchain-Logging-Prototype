@@ -87,7 +87,9 @@ wait_for_peer()
     while true; do
         configure_peer "${peer}"
 
-        if peer node status >/dev/null 2>&1; then
+        # A simple channel-list request is used as the readiness
+        # check. Fabric 2.5 does not provide "peer node status".
+        if peer channel list >/dev/null 2>&1; then
             echo "  ${peer}: peer is ready."
             return 0
         fi
@@ -105,6 +107,7 @@ wait_for_peer()
 channel_block()
 {
     local channel="$1"
+
     echo "${VNFM_CHANNEL_BLOCK_DIR}/${channel}/channel.block"
 }
 
@@ -176,6 +179,7 @@ install_chaincode()
     configure_peer "${peer}"
 
     local package_id
+
     package_id="$(get_package_id "${peer}" || true)"
 
     echo
@@ -200,7 +204,7 @@ get_package_id()
 {
     local peer="$1"
 
-    configure_peer "${peer}" >/dev/null
+    configure_peer "${peer}"
 
     peer lifecycle chaincode queryinstalled 2>/dev/null |
         awk -v label="${PACKAGE_LABEL}" '
@@ -213,6 +217,43 @@ get_package_id()
         '
 }
 
+chaincode_is_committed()
+{
+    local peer="$1"
+    local channel="$2"
+
+    configure_peer "${peer}" >/dev/null
+
+    local committed_output=""
+
+    if ! committed_output="$(
+        peer lifecycle chaincode querycommitted \
+            --channelID "${channel}" \
+            --name "${CHAINCODE_NAME}" \
+            2>/dev/null
+    )"; then
+        return 1
+    fi
+
+    printf '%s\n' "${committed_output}" |
+        grep -qE \
+        "Version: ${CHAINCODE_VERSION}, Sequence: ${CHAINCODE_SEQUENCE}([[:space:]]|$)"
+}
+
+query_chaincode_approval()
+{
+    local peer="$1"
+    local channel="$2"
+
+    configure_peer "${peer}" >/dev/null
+
+    peer lifecycle chaincode queryapproved \
+        --channelID "${channel}" \
+        --name "${CHAINCODE_NAME}" \
+        --sequence "${CHAINCODE_SEQUENCE}" \
+        --output json 2>/dev/null
+}
+
 approve_chaincode()
 {
     local peer="$1"
@@ -220,6 +261,67 @@ approve_chaincode()
     local package_id="$3"
 
     configure_peer "${peer}"
+
+    echo
+    echo "Checking approval for ${CHAINCODE_NAME}"
+    echo "  Channel : ${channel}"
+    echo "  Peer    : ${peer}"
+
+    local approved_json=""
+    local approved_version=""
+    local approved_package_id=""
+
+    if approved_json="$(query_chaincode_approval "${peer}" "${channel}")"; then
+
+        approved_version="$(
+            printf '%s\n' "${approved_json}" |
+                python3 -c '
+import json
+import sys
+
+data = json.load(sys.stdin)
+
+print(data.get("version", ""))
+'
+        )"
+
+        approved_package_id="$(
+            printf '%s\n' "${approved_json}" |
+                python3 -c '
+import json
+import sys
+
+data = json.load(sys.stdin)
+
+source = data.get("source", {})
+local_package = source.get("LocalPackage", {})
+
+print(local_package.get("package_id", ""))
+'
+        )"
+
+        if [ "${approved_version}" = "${CHAINCODE_VERSION}" ] &&
+           [ "${approved_package_id}" = "${package_id}" ]; then
+
+            echo "  ${peer}: ${CHAINCODE_NAME} sequence ${CHAINCODE_SEQUENCE} already approved."
+            echo "  Package ID: ${approved_package_id}"
+            return 0
+        fi
+
+        echo
+        echo "ERROR: ${CHAINCODE_NAME} sequence ${CHAINCODE_SEQUENCE}"
+        echo "       is already approved with different content."
+        echo
+        echo "Expected:"
+        echo "  Version    : ${CHAINCODE_VERSION}"
+        echo "  Package ID : ${package_id}"
+        echo
+        echo "Approved:"
+        echo "  Version    : ${approved_version}"
+        echo "  Package ID : ${approved_package_id}"
+
+        return 1
+    fi
 
     echo
     echo "Approving ${CHAINCODE_NAME}"
@@ -371,7 +473,25 @@ for channel in "${CHANNELS[@]}"; do
     echo "  ${PACKAGE_ID}"
 
     # --------------------------------------------------------
+    # If the chaincode definition is already committed, there
+    # is nothing more to deploy on this channel.
+    # --------------------------------------------------------
+
+    if chaincode_is_committed "${PEERS[0]}" "${channel}"; then
+        echo
+        echo "${CHAINCODE_NAME} is already committed."
+        echo "  Channel  : ${channel}"
+        echo "  Version  : ${CHAINCODE_VERSION}"
+        echo "  Sequence : ${CHAINCODE_SEQUENCE}"
+        continue
+    fi
+
+    # --------------------------------------------------------
     # Approve.
+    #
+    # This is idempotent. If approval already exists with the
+    # same version/package/sequence, it is reused instead of
+    # submitting the same uncommitted sequence again.
     # --------------------------------------------------------
 
     approve_chaincode \

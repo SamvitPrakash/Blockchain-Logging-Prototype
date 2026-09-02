@@ -109,7 +109,7 @@ fabric-ca-client register \
     --id.name "${ORDERER_IDENTITY}" \
     --id.secret "${ORDERER_PASSWORD}" \
     --id.type orderer \
-    --id.affiliation "org1.orderer" \
+    --id.affiliation "org1" \
     -u "${CA_URL}"
 
 echo "Orderer registered."
@@ -150,7 +150,7 @@ fabric-ca-client register \
     --id.name "${ORDERER_TLS_IDENTITY}" \
     --id.secret "${ORDERER_TLS_PASSWORD}" \
     --id.type orderer \
-    --id.affiliation "org1.orderer" \
+    --id.affiliation "org1" \
     -u "${CA_URL}"
 
 echo "Orderer TLS identity registered."
@@ -211,20 +211,33 @@ echo
 # MSP configuration
 # ============================================================
 
-cat > "${ORDERER_MSP_DIR}/config.yaml" <<'EOF'
+ORDERER_CA_CERT="$(find "${ORDERER_MSP_DIR}/cacerts" -type f -name '*.pem' -print -quit)"
+
+if [ -z "${ORDERER_CA_CERT}" ]; then
+    echo "ERROR: Orderer CA certificate was not found."
+    exit 1
+fi
+
+ORDERER_CA_CERT_RELATIVE="cacerts/$(basename "${ORDERER_CA_CERT}")"
+
+cat > "${ORDERER_MSP_DIR}/config.yaml" <<EOF
 NodeOUs:
   Enable: true
 
   ClientOUIdentifier:
+    Certificate: ${ORDERER_CA_CERT_RELATIVE}
     OrganizationalUnitIdentifier: client
 
   AdminOUIdentifier:
+    Certificate: ${ORDERER_CA_CERT_RELATIVE}
     OrganizationalUnitIdentifier: admin
 
   PeerOUIdentifier:
+    Certificate: ${ORDERER_CA_CERT_RELATIVE}
     OrganizationalUnitIdentifier: peer
 
   OrdererOUIdentifier:
+    Certificate: ${ORDERER_CA_CERT_RELATIVE}
     OrganizationalUnitIdentifier: orderer
 EOF
 
