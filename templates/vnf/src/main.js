@@ -245,7 +245,7 @@ async function submitLog(contract, record) {
 
     if (result && result.length > 0) {
         console.log(
-            `Chaincode response: ${result.toString()}`
+            `Chaincode response: ${Buffer.from(result).toString("utf8")}`
         );
     }
 }

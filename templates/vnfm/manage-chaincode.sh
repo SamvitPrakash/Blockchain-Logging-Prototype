@@ -247,7 +247,6 @@ get_committed_version()
 {
     local peer="$1"
     local channel="$2"
-
     local committed_output=""
 
     committed_output="$(
@@ -327,7 +326,8 @@ import sys
 data = json.load(sys.stdin)
 
 source = data.get("source", {})
-local_package = source.get("LocalPackage", {})
+type_data = source.get("Type", {})
+local_package = type_data.get("LocalPackage", {})
 
 print(local_package.get("package_id", "") or "")
 '
@@ -434,7 +434,6 @@ determine_sequence()
     echo "  Installed package: ${package_id}"
 
     if [ "${approved_package_id}" = "${package_id}" ]; then
-
         echo
         echo "Committed definition already uses the installed package."
         echo "Keeping sequence ${CHAINCODE_SEQUENCE}."
@@ -498,7 +497,8 @@ import sys
 data = json.load(sys.stdin)
 
 source = data.get("source", {})
-local_package = source.get("LocalPackage", {})
+type_data = source.get("Type", {})
+local_package = type_data.get("LocalPackage", {})
 
 print(local_package.get("package_id", "") or "")
 '
@@ -515,43 +515,26 @@ print(local_package.get("package_id", "") or "")
             return 0
         fi
 
-        # Existing approval has no package ID.
-        #
-        # This is repairable because the requested version and
-        # sequence are already correct. Re-submit the approval
-        # using the installed package.
-        if [ "${approved_version}" = "${CHAINCODE_VERSION}" ] &&
-           [ -z "${approved_package_id}" ]; then
+        echo
+        echo "ERROR: ${CHAINCODE_NAME} sequence ${CHAINCODE_SEQUENCE}"
+        echo "       is already approved with different content."
 
-            echo
-            echo "Existing approval has no package ID."
-            echo "Updating approval with installed package."
-            echo "  Package ID: ${package_id}"
+        echo
+        echo "Expected:"
+        echo "  Version    : ${CHAINCODE_VERSION}"
+        echo "  Package ID : ${package_id}"
 
-        else
+        echo
+        echo "Approved:"
+        echo "  Version    : ${approved_version}"
+        echo "  Package ID : ${approved_package_id}"
 
-            echo
-            echo "ERROR: ${CHAINCODE_NAME} sequence ${CHAINCODE_SEQUENCE}"
-            echo "       is already approved with different content."
-
-            echo
-            echo "Expected:"
-            echo "  Version    : ${CHAINCODE_VERSION}"
-            echo "  Package ID : ${package_id}"
-
-            echo
-            echo "Approved:"
-            echo "  Version    : ${approved_version}"
-            echo "  Package ID : ${approved_package_id}"
-
-            return 1
-        fi
+        return 1
     fi
 
     echo
     echo "Approving ${CHAINCODE_NAME}"
     echo "  Channel : ${channel}"
-    echo "  Peer    : ${peer}"
     echo "  Version : ${CHAINCODE_VERSION}"
     echo "  Sequence: ${CHAINCODE_SEQUENCE}"
     echo "  Package : ${package_id}"
@@ -584,12 +567,10 @@ commit_chaincode()
     local args=()
 
     for peer in "${peers[@]}"; do
-
         args+=(
             --peerAddresses "${peer}:7051"
             --tlsRootCertFiles "${VNFM_TLS_CA}"
         )
-
     done
 
     configure_peer "${peers[0]}"
@@ -645,7 +626,6 @@ echo " VNFM Chaincode Lifecycle"
 echo "=============================================="
 echo
 
-
 test -f "${VNFM_TOPOLOGY_FILE}"
 test -d "${VNFM_MSPCONFIGPATH}"
 test -f "${VNFM_MSPCONFIGPATH}/signcerts/cert.pem"
@@ -653,40 +633,29 @@ test -f "${VNFM_MSPCONFIGPATH}/config.yaml"
 test -f "${VNFM_TLS_CA}"
 test -d "${VNFM_CHAINCODE_PATH}"
 
-
 mapfile -t CHANNELS < <(get_channels)
 
-
 if [ "${#CHANNELS[@]}" -eq 0 ]; then
-
     echo "ERROR: topology contains no channels."
-
     exit 1
 fi
 
-
 package_chaincode
-
 
 for channel in "${CHANNELS[@]}"; do
 
     mapfile -t PEERS < <(get_peers "${channel}")
 
-
     if [ "${#PEERS[@]}" -eq 0 ]; then
-
         echo "ERROR: ${channel} contains no peers."
-
         exit 1
     fi
-
 
     echo
     echo "=============================================="
     echo " ${channel}"
     echo "=============================================="
     echo
-
 
     # --------------------------------------------------------
     # Peers must be alive and joined before chaincode
@@ -703,17 +672,13 @@ for channel in "${CHANNELS[@]}"; do
 
     done
 
-
     # --------------------------------------------------------
     # Install chaincode on every channel peer.
     # --------------------------------------------------------
 
     for peer in "${PEERS[@]}"; do
-
         install_chaincode "${peer}"
-
     done
-
 
     # --------------------------------------------------------
     # Determine package ID.
@@ -731,19 +696,14 @@ for channel in "${CHANNELS[@]}"; do
 
     done
 
-
     if [ -z "${PACKAGE_ID}" ]; then
-
         echo "ERROR: package ID could not be determined."
-
         exit 1
     fi
-
 
     echo
     echo "Package ID:"
     echo "  ${PACKAGE_ID}"
-
 
     # --------------------------------------------------------
     # Determine the correct lifecycle sequence.
@@ -754,7 +714,6 @@ for channel in "${CHANNELS[@]}"; do
         "${channel}" \
         "${PACKAGE_ID}"
 
-
     echo
     echo "Deployment definition:"
     echo "  Channel : ${channel}"
@@ -762,7 +721,6 @@ for channel in "${CHANNELS[@]}"; do
     echo "  Version : ${CHAINCODE_VERSION}"
     echo "  Sequence: ${CHAINCODE_SEQUENCE}"
     echo "  Package : ${PACKAGE_ID}"
-
 
     # --------------------------------------------------------
     # If the committed definition already uses this package,
@@ -781,7 +739,6 @@ for channel in "${CHANNELS[@]}"; do
             "${channel}" || true
     )"
 
-
     if [ "${local_committed_version}" = "${CHAINCODE_VERSION}" ] &&
        [ "${local_committed_sequence}" = "${CHAINCODE_SEQUENCE}" ]; then
 
@@ -793,7 +750,6 @@ for channel in "${CHANNELS[@]}"; do
         )"
 
         if [ "${committed_package_id}" = "${PACKAGE_ID}" ]; then
-
             echo
             echo "${CHAINCODE_NAME} is already committed with the current package."
             echo "  Channel : ${channel}"
@@ -805,7 +761,6 @@ for channel in "${CHANNELS[@]}"; do
         fi
     fi
 
-
     # --------------------------------------------------------
     # Approve.
     # --------------------------------------------------------
@@ -815,7 +770,6 @@ for channel in "${CHANNELS[@]}"; do
         "${channel}" \
         "${PACKAGE_ID}"
 
-
     # --------------------------------------------------------
     # Commit.
     # --------------------------------------------------------
@@ -823,7 +777,6 @@ for channel in "${CHANNELS[@]}"; do
     commit_chaincode \
         "${channel}" \
         "${PEERS[@]}"
-
 
     # --------------------------------------------------------
     # Verify.
@@ -833,9 +786,7 @@ for channel in "${CHANNELS[@]}"; do
         "${channel}" \
         "${PEERS[0]}"
 
-
 done
-
 
 echo
 echo "=============================================="
