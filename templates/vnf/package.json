@@ -1,0 +1,14 @@
+{
+  "name": "blockchain-logging-vnf",
+  "version": "1.0.0",
+  "private": true,
+  "description": "VNF gNB log collector and Fabric client",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "node src/main.js"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.13.4",
+    "@hyperledger/fabric-gateway": "^1.8.0"
+  }
+}
