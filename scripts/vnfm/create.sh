@@ -224,7 +224,7 @@ services:
       VNFM_TLS_CLIENT_KEY: "${VNFM_TLS_CLIENT_KEY}"
 
       VNFM_CHAINCODE_NAME: "logging"
-      VNFM_CHAINCODE_VERSION: "1.0"
+      VNFM_CHAINCODE_VERSION: "1.1"
       VNFM_CHAINCODE_SEQUENCE: "1"
       VNFM_CHAINCODE_PATH: "/opt/vnfm/chaincode"
 

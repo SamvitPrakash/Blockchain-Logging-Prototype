@@ -204,7 +204,7 @@ get_package_id()
 {
     local peer="$1"
 
-    configure_peer "${peer}"
+    configure_peer "${peer}" >/dev/null
 
     peer lifecycle chaincode queryinstalled 2>/dev/null |
         awk -v label="${PACKAGE_LABEL}" '
@@ -299,6 +299,12 @@ local_package = source.get("LocalPackage", {})
 print(local_package.get("package_id", ""))
 '
         )"
+
+        if [[ "${approved_version}" == "${CHAINCODE_VERSION}" &&
+            -z "${approved_package_id}" ]]; then
+            echo "Existing approval has no package ID; updating approval with installed package."
+            # continue to approveformyorg below
+        fi
 
         if [ "${approved_version}" = "${CHAINCODE_VERSION}" ] &&
            [ "${approved_package_id}" = "${package_id}" ]; then
