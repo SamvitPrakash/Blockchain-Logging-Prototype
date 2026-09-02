@@ -12,7 +12,6 @@ set -euo pipefail
 
 CHAINCODE_NAME="${VNFM_CHAINCODE_NAME:-logging}"
 CHAINCODE_VERSION="${VNFM_CHAINCODE_VERSION:-1.0}"
-
 CHAINCODE_SEQUENCE="${VNFM_CHAINCODE_SEQUENCE:-1}"
 
 WAIT_INTERVAL="${VNFM_WAIT_INTERVAL:-2}"
@@ -75,7 +74,6 @@ configure_peer()
     echo
     echo "Peer:"
     echo "  ${CORE_PEER_ADDRESS}"
-
     echo "TLS CA:"
     echo "  ${CORE_PEER_TLS_ROOTCERT_FILE}"
 }
@@ -91,7 +89,6 @@ wait_for_peer()
     local elapsed=0
 
     while true; do
-
         configure_peer "${peer}"
 
         if peer channel list >/dev/null 2>&1; then
@@ -105,9 +102,7 @@ wait_for_peer()
         fi
 
         sleep "${WAIT_INTERVAL}"
-
         elapsed=$((elapsed + WAIT_INTERVAL))
-
     done
 }
 
@@ -134,19 +129,15 @@ join_channel()
         grep -qE "(^|[[:space:]])${channel}([[:space:]]|$)"; then
 
         echo "  ${peer}: already joined ${channel}"
-
         return 0
     fi
 
     local block
-
     block="$(channel_block "${channel}")"
 
     if [ ! -s "${block}" ]; then
-
         echo "ERROR: channel block does not exist:"
         echo "  ${block}"
-
         return 1
     fi
 
@@ -177,15 +168,31 @@ package_chaincode()
         --label "${PACKAGE_LABEL}"
 
     test -s "${PACKAGE_FILE}" || {
-
         echo "ERROR: chaincode package was not generated."
-
         exit 1
     }
 
     echo
     echo "Package:"
     echo "  ${PACKAGE_FILE}"
+}
+
+
+get_package_id()
+{
+    local peer="$1"
+
+    configure_peer "${peer}" >/dev/null
+
+    peer lifecycle chaincode queryinstalled 2>/dev/null |
+        awk -v label="${PACKAGE_LABEL}" '
+            $0 ~ /Package ID:/ && $0 ~ ("Label: " label) {
+                sub(/^.*Package ID: /, "", $0)
+                sub(/, Label:.*$/, "", $0)
+                print
+                exit
+            }
+        '
 }
 
 
@@ -203,10 +210,8 @@ install_chaincode()
     echo "Checking ${CHAINCODE_NAME} installation on ${peer}..."
 
     if [ -n "${package_id}" ]; then
-
         echo "  ${peer}: ${CHAINCODE_NAME} already installed."
         echo "  Package ID: ${package_id}"
-
         return 0
     fi
 
@@ -220,48 +225,69 @@ install_chaincode()
 }
 
 
-get_package_id()
-{
-    local peer="$1"
+# ============================================================
+# Query committed definition
+# ============================================================
 
-    configure_peer "${peer}" >/dev/null
-
-    peer lifecycle chaincode queryinstalled 2>/dev/null |
-        awk -v label="${PACKAGE_LABEL}" '
-        $0 ~ /Package ID:/ && $0 ~ ("Label: " label) {
-            sub(/^.*Package ID: /, "", $0)
-            sub(/, Label:.*$/, "", $0)
-            print
-            exit
-        }
-        '
-}
-
-
-chaincode_is_committed()
+get_committed_definition()
 {
     local peer="$1"
     local channel="$2"
 
     configure_peer "${peer}" >/dev/null
 
+    peer lifecycle chaincode querycommitted \
+        --channelID "${channel}" \
+        --name "${CHAINCODE_NAME}" \
+        2>/dev/null
+}
+
+
+get_committed_version()
+{
+    local peer="$1"
+    local channel="$2"
+
     local committed_output=""
 
-    if ! committed_output="$(
-        peer lifecycle chaincode querycommitted \
-            --channelID "${channel}" \
-            --name "${CHAINCODE_NAME}" \
-            2>/dev/null
-    )"; then
+    committed_output="$(
+        get_committed_definition "${peer}" "${channel}" || true
+    )"
 
+    if [ -z "${committed_output}" ]; then
         return 1
     fi
 
     printf '%s\n' "${committed_output}" |
-        grep -qE \
-        "Version: ${CHAINCODE_VERSION}, Sequence: ${CHAINCODE_SEQUENCE}([[:space:]]|$)"
+        sed -n 's/.*Version: \([^,]*\), Sequence: .*/\1/p' |
+        head -n 1
 }
 
+
+get_committed_sequence()
+{
+    local peer="$1"
+    local channel="$2"
+
+    local committed_output=""
+
+    committed_output="$(
+        get_committed_definition "${peer}" "${channel}" || true
+    )"
+
+    if [ -z "${committed_output}" ]; then
+        return 1
+    fi
+
+    printf '%s\n' "${committed_output}" |
+        sed -n 's/.*Version: [^,]*, Sequence: \([0-9][0-9]*\).*/\1/p' |
+        head -n 1
+}
+
+
+# ============================================================
+# Query approval
+# ============================================================
 
 query_chaincode_approval()
 {
@@ -278,6 +304,158 @@ query_chaincode_approval()
 }
 
 
+get_approved_package_id()
+{
+    local peer="$1"
+    local channel="$2"
+
+    local approved_json=""
+
+    approved_json="$(
+        query_chaincode_approval "${peer}" "${channel}" || true
+    )"
+
+    if [ -z "${approved_json}" ]; then
+        return 1
+    fi
+
+    printf '%s\n' "${approved_json}" |
+        python3 -c '
+import json
+import sys
+
+data = json.load(sys.stdin)
+
+source = data.get("source", {})
+local_package = source.get("LocalPackage", {})
+
+print(local_package.get("package_id", "") or "")
+'
+}
+
+
+get_approved_version()
+{
+    local peer="$1"
+    local channel="$2"
+
+    local approved_json=""
+
+    approved_json="$(
+        query_chaincode_approval "${peer}" "${channel}" || true
+    )"
+
+    if [ -z "${approved_json}" ]; then
+        return 1
+    fi
+
+    printf '%s\n' "${approved_json}" |
+        python3 -c '
+import json
+import sys
+
+data = json.load(sys.stdin)
+
+print(data.get("version", "") or "")
+'
+}
+
+
+# ============================================================
+# Determine sequence
+#
+# The configured sequence is the minimum starting sequence.
+#
+# If a chaincode definition is already committed:
+#
+#   same version + same package
+#       -> keep the committed sequence
+#
+#   same version + different package
+#       -> advance to committed sequence + 1
+#
+# This allows the VNFM to deploy a changed chaincode package
+# without requiring manual sequence updates.
+# ============================================================
+
+determine_sequence()
+{
+    local peer="$1"
+    local channel="$2"
+    local package_id="$3"
+
+    local committed_version=""
+    local committed_sequence=""
+    local approved_package_id=""
+
+    committed_version="$(
+        get_committed_version "${peer}" "${channel}" || true
+    )"
+
+    committed_sequence="$(
+        get_committed_sequence "${peer}" "${channel}" || true
+    )"
+
+    # No committed definition exists.
+    if [ -z "${committed_sequence}" ]; then
+        echo
+        echo "No committed ${CHAINCODE_NAME} definition found."
+        echo "Using configured sequence ${CHAINCODE_SEQUENCE}."
+        return 0
+    fi
+
+    echo
+    echo "Existing committed definition:"
+    echo "  Version : ${committed_version}"
+    echo "  Sequence: ${committed_sequence}"
+
+    # A different chaincode version is a new definition.
+    if [ "${committed_version}" != "${CHAINCODE_VERSION}" ]; then
+
+        if [ "${CHAINCODE_SEQUENCE}" -le "${committed_sequence}" ]; then
+            CHAINCODE_SEQUENCE=$((committed_sequence + 1))
+        fi
+
+        echo
+        echo "Chaincode version differs."
+        echo "Using sequence ${CHAINCODE_SEQUENCE}."
+
+        return 0
+    fi
+
+    # Check the package associated with the committed sequence.
+    CHAINCODE_SEQUENCE="${committed_sequence}"
+
+    approved_package_id="$(
+        get_approved_package_id "${peer}" "${channel}" || true
+    )"
+
+    echo "  Approved package: ${approved_package_id:-<none>}"
+    echo "  Installed package: ${package_id}"
+
+    if [ "${approved_package_id}" = "${package_id}" ]; then
+
+        echo
+        echo "Committed definition already uses the installed package."
+        echo "Keeping sequence ${CHAINCODE_SEQUENCE}."
+
+        return 0
+    fi
+
+    # The committed definition uses a different package.
+    CHAINCODE_SEQUENCE=$((committed_sequence + 1))
+
+    echo
+    echo "Installed package differs from committed package."
+    echo "Creating new chaincode definition."
+    echo "  New sequence: ${CHAINCODE_SEQUENCE}"
+}
+
+
+# ============================================================
+# Approval
+# ============================================================
+
 approve_chaincode()
 {
     local peer="$1"
@@ -290,6 +468,8 @@ approve_chaincode()
     echo "Checking approval for ${CHAINCODE_NAME}"
     echo "  Channel : ${channel}"
     echo "  Peer    : ${peer}"
+    echo "  Version : ${CHAINCODE_VERSION}"
+    echo "  Sequence: ${CHAINCODE_SEQUENCE}"
 
     local approved_json=""
     local approved_version=""
@@ -305,7 +485,7 @@ import sys
 
 data = json.load(sys.stdin)
 
-print(data.get("version", ""))
+print(data.get("version", "") or "")
 '
         )"
 
@@ -324,10 +504,7 @@ print(local_package.get("package_id", "") or "")
 '
         )"
 
-        # ----------------------------------------------------
-        # Existing approval exactly matches what we installed.
-        # ----------------------------------------------------
-
+        # Existing approval exactly matches the requested definition.
         if [ "${approved_version}" = "${CHAINCODE_VERSION}" ] &&
            [ "${approved_package_id}" = "${package_id}" ]; then
 
@@ -338,15 +515,11 @@ print(local_package.get("package_id", "") or "")
             return 0
         fi
 
-        # ----------------------------------------------------
-        # Existing approval has the same version and sequence,
-        # but no package ID.
+        # Existing approval has no package ID.
         #
-        # This is a valid state that can be repaired by
-        # submitting the approval again with the installed
-        # package ID.
-        # ----------------------------------------------------
-
+        # This is repairable because the requested version and
+        # sequence are already correct. Re-submit the approval
+        # using the installed package.
         if [ "${approved_version}" = "${CHAINCODE_VERSION}" ] &&
            [ -z "${approved_package_id}" ]; then
 
@@ -356,11 +529,6 @@ print(local_package.get("package_id", "") or "")
             echo "  Package ID: ${package_id}"
 
         else
-
-            # ------------------------------------------------
-            # Something genuinely conflicts with the requested
-            # chaincode definition.
-            # ------------------------------------------------
 
             echo
             echo "ERROR: ${CHAINCODE_NAME} sequence ${CHAINCODE_SEQUENCE}"
@@ -380,20 +548,13 @@ print(local_package.get("package_id", "") or "")
         fi
     fi
 
-    # --------------------------------------------------------
-    # Submit the approval.
-    #
-    # This handles:
-    #
-    #   - no existing approval
-    #   - existing approval with missing package ID
-    #
-    # --------------------------------------------------------
-
     echo
     echo "Approving ${CHAINCODE_NAME}"
     echo "  Channel : ${channel}"
     echo "  Peer    : ${peer}"
+    echo "  Version : ${CHAINCODE_VERSION}"
+    echo "  Sequence: ${CHAINCODE_SEQUENCE}"
+    echo "  Package : ${package_id}"
 
     peer lifecycle chaincode approveformyorg \
         --channelID "${channel}" \
@@ -408,6 +569,10 @@ print(local_package.get("package_id", "") or "")
     echo "  ${peer}: approval submitted."
 }
 
+
+# ============================================================
+# Commit
+# ============================================================
 
 commit_chaincode()
 {
@@ -433,6 +598,8 @@ commit_chaincode()
     echo "Committing ${CHAINCODE_NAME}"
     echo "  Channel : ${channel}"
     echo "  Peers   : ${peers[*]}"
+    echo "  Version : ${CHAINCODE_VERSION}"
+    echo "  Sequence: ${CHAINCODE_SEQUENCE}"
 
     peer lifecycle chaincode commit \
         --channelID "${channel}" \
@@ -447,6 +614,10 @@ commit_chaincode()
     echo "  ${channel}: chaincode committed."
 }
 
+
+# ============================================================
+# Verify
+# ============================================================
 
 verify_chaincode()
 {
@@ -474,6 +645,7 @@ echo " VNFM Chaincode Lifecycle"
 echo "=============================================="
 echo
 
+
 test -f "${VNFM_TOPOLOGY_FILE}"
 test -d "${VNFM_MSPCONFIGPATH}"
 test -f "${VNFM_MSPCONFIGPATH}/signcerts/cert.pem"
@@ -481,7 +653,9 @@ test -f "${VNFM_MSPCONFIGPATH}/config.yaml"
 test -f "${VNFM_TLS_CA}"
 test -d "${VNFM_CHAINCODE_PATH}"
 
+
 mapfile -t CHANNELS < <(get_channels)
+
 
 if [ "${#CHANNELS[@]}" -eq 0 ]; then
 
@@ -498,12 +672,14 @@ for channel in "${CHANNELS[@]}"; do
 
     mapfile -t PEERS < <(get_peers "${channel}")
 
+
     if [ "${#PEERS[@]}" -eq 0 ]; then
 
         echo "ERROR: ${channel} contains no peers."
 
         exit 1
     fi
+
 
     echo
     echo "=============================================="
@@ -570,31 +746,68 @@ for channel in "${CHANNELS[@]}"; do
 
 
     # --------------------------------------------------------
-    # If the chaincode definition is already committed, there
-    # is nothing more to deploy on this channel.
+    # Determine the correct lifecycle sequence.
     # --------------------------------------------------------
 
-    if chaincode_is_committed \
+    determine_sequence \
         "${PEERS[0]}" \
-        "${channel}"; then
+        "${channel}" \
+        "${PACKAGE_ID}"
 
-        echo
-        echo "${CHAINCODE_NAME} is already committed."
-        echo "  Channel : ${channel}"
-        echo "  Version : ${CHAINCODE_VERSION}"
-        echo "  Sequence: ${CHAINCODE_SEQUENCE}"
 
-        continue
+    echo
+    echo "Deployment definition:"
+    echo "  Channel : ${channel}"
+    echo "  Name    : ${CHAINCODE_NAME}"
+    echo "  Version : ${CHAINCODE_VERSION}"
+    echo "  Sequence: ${CHAINCODE_SEQUENCE}"
+    echo "  Package : ${PACKAGE_ID}"
+
+
+    # --------------------------------------------------------
+    # If the committed definition already uses this package,
+    # there is nothing more to deploy.
+    # --------------------------------------------------------
+
+    local_committed_sequence="$(
+        get_committed_sequence \
+            "${PEERS[0]}" \
+            "${channel}" || true
+    )"
+
+    local_committed_version="$(
+        get_committed_version \
+            "${PEERS[0]}" \
+            "${channel}" || true
+    )"
+
+
+    if [ "${local_committed_version}" = "${CHAINCODE_VERSION}" ] &&
+       [ "${local_committed_sequence}" = "${CHAINCODE_SEQUENCE}" ]; then
+
+        committed_package_id="$(
+            CHAINCODE_SEQUENCE="${local_committed_sequence}" \
+            get_approved_package_id \
+                "${PEERS[0]}" \
+                "${channel}" || true
+        )"
+
+        if [ "${committed_package_id}" = "${PACKAGE_ID}" ]; then
+
+            echo
+            echo "${CHAINCODE_NAME} is already committed with the current package."
+            echo "  Channel : ${channel}"
+            echo "  Version : ${CHAINCODE_VERSION}"
+            echo "  Sequence: ${CHAINCODE_SEQUENCE}"
+            echo "  Package : ${PACKAGE_ID}"
+
+            continue
+        fi
     fi
 
 
     # --------------------------------------------------------
     # Approve.
-    #
-    # This is idempotent.
-    #
-    # If the existing approval has no package ID, it is
-    # repaired using the currently installed package.
     # --------------------------------------------------------
 
     approve_chaincode \
@@ -619,6 +832,7 @@ for channel in "${CHANNELS[@]}"; do
     verify_chaincode \
         "${channel}" \
         "${PEERS[0]}"
+
 
 done
 

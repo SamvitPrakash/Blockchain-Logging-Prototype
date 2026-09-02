@@ -1,4 +1,5 @@
 docker rm -f fabric-bootstrap fabric-ca fabric-orderer-1 vnfm vnf-1 vnf-2
+docker rm -f $(docker ps -aq --filter 'name=dev-fabric-peer-1-logging' --filter 'name=dev-fabric-peer-2-logging') 2>/dev/null || true
 docker rm -f fabric-enroll-1 fabric-peer-1
 docker rm -f fabric-enroll-2 fabric-peer-2
 # docker rm -f fabric-enroll-3 fabric-peer-3

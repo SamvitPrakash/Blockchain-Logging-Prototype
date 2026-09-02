@@ -37,10 +37,9 @@ class LoggingContract extends Contract {
 
     async LogExists(ctx, txId) {
         const data = await ctx.stub.getState(txId);
+
         return data && data.length > 0;
     }
 }
 
-module.exports = {
-    LoggingContract
-};
+module.exports = LoggingContract;

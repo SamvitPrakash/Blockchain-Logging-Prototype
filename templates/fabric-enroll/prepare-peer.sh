@@ -167,6 +167,10 @@ peer:
 vm:
   endpoint: unix:///var/run/docker.sock
 
+  docker:
+    hostConfig:
+      NetworkMode: XIT
+
 chaincode:
   mode: net
 
