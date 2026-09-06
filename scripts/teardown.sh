@@ -12,7 +12,7 @@ for compose_file in build/vnf-*/compose.yaml; do
 
     echo
     echo "Stopping $(dirname "$compose_file")..."
-    docker compose --progress plain -f "$compose_file" down &
+    docker compose --progress plain -f "$compose_file" down -v &
     
 done
 
@@ -26,16 +26,9 @@ for compose_file in build/fabric-enroll-*/compose.yaml; do
 
     echo
     echo "Stopping $(dirname "$compose_file")..."
-    docker compose --progress plain -f "$compose_file" down &
+    docker compose --progress plain -f "$compose_file" down -v &
     
 done
-
-echo
-echo "=============================================="
-echo " Tearing down all FABRIC-LOGGING instances"
-echo "=============================================="
-
-docker rm -f  $(docker ps -q --filter "name=dev-fabric-peer-") &
 
 echo "=============================================="
 echo " Tearing down all 5G instances"
@@ -46,7 +39,7 @@ for compose_file in build/gnb-*/compose.yaml; do
 
     echo
     echo "Stopping $(dirname "$compose_file")..."
-    docker compose --progress plain -f "$compose_file" down &
+    docker compose --progress plain -f "$compose_file" down -v &
 
 done
 
@@ -55,7 +48,7 @@ for compose_file in build/ue-*/compose.yaml; do
 
     echo
     echo "Stopping $(dirname "$compose_file")..."
-    docker compose --progress plain -f "$compose_file" down &
+    docker compose --progress plain -f "$compose_file" down -v &
     
 done
 
@@ -65,21 +58,21 @@ echo " Tearing down VNFM instance"
 echo "=============================================="
 
 
-docker compose --progress plain -f "build/vnfm/compose.yaml" down &
+docker compose --progress plain -f "build/vnfm/compose.yaml" down -v &
 
 echo
 echo "=============================================="
 echo " Tearing down FABRIC-BOOTSTRAP/FABRIC-ORDERER instance"
 echo "=============================================="
 
-docker compose --progress plain -f "build/fabric-bootstrap/compose.yaml" down &
+docker compose --progress plain -f "build/fabric-bootstrap/compose.yaml" down -v &
 
 echo
 echo "=============================================="
 echo " Tearing down FABRIC-CA instance"
 echo "=============================================="
 
-docker compose --progress plain -f "build/fabric-ca/compose.yaml" down &
+docker compose --progress plain -f "build/fabric-ca/compose.yaml" down -v &
 
 echo
 echo "=============================================="
@@ -90,6 +83,13 @@ docker exec mongo mongosh --quiet open5gs --eval \
 'db.subscribers.deleteMany({})'
 
 wait
+
+echo
+echo "=============================================="
+echo " Tearing down all FABRIC-LOGGING instances"
+echo "=============================================="
+
+docker rm -f  $(docker ps -aq --filter "name=dev-fabric-peer-") &
 
 echo
 echo "=============================================="
@@ -111,6 +111,16 @@ if docker network inspect XIT >/dev/null 2>&1; then
 else
     echo "XIT does not exist."
 fi
+
+echo
+echo "=============================================="
+echo " Removing gNB log volumes"
+echo "=============================================="
+
+for volume in $(docker volume ls --format '{{.Name}}' | grep '^gnb-[0-9]\+-logs$' || true); do
+    echo "Removing ${volume}..."
+    docker volume rm "$volume"
+done
 
 echo
 echo "=============================================="

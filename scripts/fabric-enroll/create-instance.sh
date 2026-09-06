@@ -28,6 +28,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TEMPLATE_DIR="$PROJECT_ROOT/templates/fabric-enroll"
 BUILD_DIR="$PROJECT_ROOT/build/fabric-enroll-${INSTANCE}"
 HOST_PEER_STATE_DIR="$BUILD_DIR/peer"
+IMAGE_NAME="blockchain-fabric-enroll:latest"
 
 # ============================================================
 # Naming
@@ -123,16 +124,6 @@ fi
 mkdir -p \
     "$BUILD_DIR" \
     "$HOST_PEER_STATE_DIR"
-
-# ============================================================
-# Build FABRIC-ENROLL image
-# ============================================================
-
-IMAGE_NAME="blockchain-fabric-enroll:latest"
-
-docker build \
-    -t "$IMAGE_NAME" \
-    "$TEMPLATE_DIR"
 
 # ============================================================
 # Generate Compose
