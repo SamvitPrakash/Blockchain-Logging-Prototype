@@ -11,6 +11,7 @@ echo "################################################"
 echo "Running initialization..."
 echo "################################################"
 
+./scripts/open5gs/BuildCore.sh
 ./scripts/open5gs/Core.sh
 
 touch "$MARKER"

@@ -7,7 +7,7 @@ LEDGER_COUNT="${2:-}"
 GENERATION_SEED="${3:-}"
 
 if [ -z "$TOWER_COUNT" ] || [ -z "$LEDGER_COUNT" ] || [ -z "$GENERATION_SEED" ]; then
-  echo "Usage: $0 <tower_count> <ledger_count> <generation_seed> [verbose]"
+  echo "Usage: $0 <tower_count> <ledger_count> <generation_seed>"
   exit 1
 fi
 
