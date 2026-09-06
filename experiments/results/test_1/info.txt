@@ -1,0 +1,3 @@
+    Number of towers [Start]: 2
+    Number of towers [End]: 50
+    Seed: 23525119
