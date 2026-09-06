@@ -102,7 +102,7 @@ echo "########################################################################"
 docker compose -f build/vnfm/compose.yaml up -d
 
 for i in $(seq 1 "$TOWER_COUNT"); do
-  docker compose -f "build/vnf-$i/compose.yaml" up -d --build
+  docker compose -f "build/vnf-$i/compose.yaml" up -d
 done
 
 echo
