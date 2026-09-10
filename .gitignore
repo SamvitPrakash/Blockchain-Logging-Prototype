@@ -1,2 +1,4 @@
 build/*
-channel-block.json
+scripts/.init
+temp/*
+experiments/current_experiment

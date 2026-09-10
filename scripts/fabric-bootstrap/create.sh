@@ -9,11 +9,11 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(realpath "$SCRIPT_DIR/../..")"
 
-TEMPLATE_DIR="$PROJECT_ROOT/templates/fabric-bootstrap"
 BUILD_DIR="$PROJECT_ROOT/build/fabric-bootstrap"
 
 VNFM_NAME="fabric-bootstrap"
 ORDERER_NAME="fabric-orderer-1"
+IMAGE_NAME="blockchain-fabric-bootstrap:latest"
 
 # ============================================================
 # Network addressing
@@ -50,18 +50,6 @@ if [ ! -d "$PROJECT_ROOT" ]; then
     exit 1
 fi
 
-for file in \
-    Dockerfile \
-    entrypoint.sh \
-    enroll-orderer.sh
-do
-    if [ ! -f "$TEMPLATE_DIR/$file" ]; then
-        echo "Error: FABRIC-BOOTSTRAP template file not found:"
-        echo "  $TEMPLATE_DIR/$file"
-        exit 1
-    fi
-done
-
 if ! docker network inspect "$XIT_NETWORK" >/dev/null 2>&1; then
     echo "Error: XIT network does not exist."
     echo
@@ -97,16 +85,6 @@ fi
 
 mkdir -p "$BUILD_DIR"
 mkdir -p "$ORDERER_HOST_DATA_DIR"
-
-# ============================================================
-# Build FABRIC-BOOTSTRAP image
-# ============================================================
-
-IMAGE_NAME="blockchain-fabric-bootstrap:latest"
-
-docker build \
-    -t "$IMAGE_NAME" \
-    "$TEMPLATE_DIR"
 
 # ============================================================
 # Generate Compose
