@@ -1,2 +1,4 @@
 build/*
 scripts/.init
+temp/*
+experiments/current_experiment
