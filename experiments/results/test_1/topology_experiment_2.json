@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "fabric": {
+    "orderer": "fabric-orderer-1",
+    "orderer_count": 1,
+    "orderer_msp": "OrdererMSP"
+  },
+  "organization": {
+    "name": "Org1",
+    "msp_id": "Org1MSP"
+  },
+  "experiment": {
+    "peer_count": 3,
+    "ledger_count": 1,
+    "seed": 23525119
+  },
+  "ledger_sizes": [
+    3
+  ],
+  "channels": {
+    "channel-1": [
+      "fabric-peer-1",
+      "fabric-peer-2",
+      "fabric-peer-3"
+    ]
+  },
+  "peer_to_channel": {
+    "fabric-peer-1": "channel-1",
+    "fabric-peer-2": "channel-1",
+    "fabric-peer-3": "channel-1"
+  }
+}

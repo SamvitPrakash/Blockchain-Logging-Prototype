@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "fabric": {
+    "orderer": "fabric-orderer-1",
+    "orderer_count": 1,
+    "orderer_msp": "OrdererMSP"
+  },
+  "organization": {
+    "name": "Org1",
+    "msp_id": "Org1MSP"
+  },
+  "experiment": {
+    "peer_count": 15,
+    "ledger_count": 2,
+    "seed": 23525119
+  },
+  "ledger_sizes": [
+    8,
+    7
+  ],
+  "channels": {
+    "channel-1": [
+      "fabric-peer-3",
+      "fabric-peer-9",
+      "fabric-peer-2",
+      "fabric-peer-5",
+      "fabric-peer-6",
+      "fabric-peer-1",
+      "fabric-peer-8",
+      "fabric-peer-15"
+    ],
+    "channel-2": [
+      "fabric-peer-14",
+      "fabric-peer-12",
+      "fabric-peer-13",
+      "fabric-peer-10",
+      "fabric-peer-4",
+      "fabric-peer-7",
+      "fabric-peer-11"
+    ]
+  },
+  "peer_to_channel": {
+    "fabric-peer-3": "channel-1",
+    "fabric-peer-9": "channel-1",
+    "fabric-peer-2": "channel-1",
+    "fabric-peer-5": "channel-1",
+    "fabric-peer-6": "channel-1",
+    "fabric-peer-1": "channel-1",
+    "fabric-peer-8": "channel-1",
+    "fabric-peer-15": "channel-1",
+    "fabric-peer-14": "channel-2",
+    "fabric-peer-12": "channel-2",
+    "fabric-peer-13": "channel-2",
+    "fabric-peer-10": "channel-2",
+    "fabric-peer-4": "channel-2",
+    "fabric-peer-7": "channel-2",
+    "fabric-peer-11": "channel-2"
+  }
+}

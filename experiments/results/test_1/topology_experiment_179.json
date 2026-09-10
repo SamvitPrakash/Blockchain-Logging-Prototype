@@ -1,0 +1,107 @@
+{
+  "version": 1,
+  "fabric": {
+    "orderer": "fabric-orderer-1",
+    "orderer_count": 1,
+    "orderer_msp": "OrdererMSP"
+  },
+  "organization": {
+    "name": "Org1",
+    "msp_id": "Org1MSP"
+  },
+  "experiment": {
+    "peer_count": 27,
+    "ledger_count": 10,
+    "seed": 23525119
+  },
+  "ledger_sizes": [
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    2,
+    2,
+    2
+  ],
+  "channels": {
+    "channel-1": [
+      "fabric-peer-20",
+      "fabric-peer-16",
+      "fabric-peer-3"
+    ],
+    "channel-2": [
+      "fabric-peer-25",
+      "fabric-peer-10",
+      "fabric-peer-12"
+    ],
+    "channel-3": [
+      "fabric-peer-17",
+      "fabric-peer-15",
+      "fabric-peer-6"
+    ],
+    "channel-4": [
+      "fabric-peer-11",
+      "fabric-peer-22",
+      "fabric-peer-18"
+    ],
+    "channel-5": [
+      "fabric-peer-9",
+      "fabric-peer-13",
+      "fabric-peer-5"
+    ],
+    "channel-6": [
+      "fabric-peer-2",
+      "fabric-peer-4",
+      "fabric-peer-1"
+    ],
+    "channel-7": [
+      "fabric-peer-27",
+      "fabric-peer-23",
+      "fabric-peer-26"
+    ],
+    "channel-8": [
+      "fabric-peer-24",
+      "fabric-peer-8"
+    ],
+    "channel-9": [
+      "fabric-peer-19",
+      "fabric-peer-7"
+    ],
+    "channel-10": [
+      "fabric-peer-14",
+      "fabric-peer-21"
+    ]
+  },
+  "peer_to_channel": {
+    "fabric-peer-20": "channel-1",
+    "fabric-peer-16": "channel-1",
+    "fabric-peer-3": "channel-1",
+    "fabric-peer-25": "channel-2",
+    "fabric-peer-10": "channel-2",
+    "fabric-peer-12": "channel-2",
+    "fabric-peer-17": "channel-3",
+    "fabric-peer-15": "channel-3",
+    "fabric-peer-6": "channel-3",
+    "fabric-peer-11": "channel-4",
+    "fabric-peer-22": "channel-4",
+    "fabric-peer-18": "channel-4",
+    "fabric-peer-9": "channel-5",
+    "fabric-peer-13": "channel-5",
+    "fabric-peer-5": "channel-5",
+    "fabric-peer-2": "channel-6",
+    "fabric-peer-4": "channel-6",
+    "fabric-peer-1": "channel-6",
+    "fabric-peer-27": "channel-7",
+    "fabric-peer-23": "channel-7",
+    "fabric-peer-26": "channel-7",
+    "fabric-peer-24": "channel-8",
+    "fabric-peer-8": "channel-8",
+    "fabric-peer-19": "channel-9",
+    "fabric-peer-7": "channel-9",
+    "fabric-peer-14": "channel-10",
+    "fabric-peer-21": "channel-10"
+  }
+}
