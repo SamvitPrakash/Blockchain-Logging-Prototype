@@ -2,3 +2,4 @@ build/*
 scripts/.init
 temp/*
 experiments/current_experiment
+evaluation/__pycache__/

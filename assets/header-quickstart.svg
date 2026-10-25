@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 84" width="1200" height="84" role="img" aria-label="Quick Start">
+  <defs>
+    <style>
+      .run { animation: run 4s linear infinite; }
+      @keyframes run { from { stroke-dashoffset: 40 } to { stroke-dashoffset: -586 } }
+    @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+    </style>
+  </defs>
+  <rect x=".75" y=".75" width="1198.5" height="82.5" rx="14" fill="#070D12" stroke="#173440" stroke-width="1.5"/>
+  <rect x="0" y="18" width="4" height="48" rx="2" fill="#2BE4A7"/>
+  <g transform="translate(28 27.0)"><rect x="1" y="3" width="26" height="22" rx="4" fill="none" stroke="#2BE4A7" stroke-width="2"/><path d="M7 11 L11 14 L7 17 M14 18 H21" stroke="#2BE4A7" stroke-width="2" fill="none" stroke-linecap="round"/></g>
+  <text x="74" y="49.0" font-family="'JetBrains Mono','Fira Code','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="20" fill="#FFB547">05</text>
+  <text x="128" y="51.0" font-family="'Segoe UI','Inter','Helvetica Neue',Helvetica,Arial,sans-serif" font-size="26" font-weight="700" fill="#E6F4F1">Quick Start</text>
+  <line x1="321.2" y1="42.0" x2="907.2" y2="42.0" stroke="#173440" stroke-width="1.6" stroke-dasharray="6 6"/><line x1="321.2" y1="42.0" x2="907.2" y2="42.0" stroke="#2BE4A7" stroke-width="1.6" stroke-dasharray="40 586" class="run"/><circle cx="394.4" cy="42.0" r="3" fill="#070D12" stroke="#2BE4A7" stroke-width="1.6"/><circle cx="541.0" cy="42.0" r="3" fill="#070D12" stroke="#4E6B77" stroke-width="1.6"/><circle cx="687.5" cy="42.0" r="3" fill="#070D12" stroke="#2BE4A7" stroke-width="1.6"/><circle cx="834.0" cy="42.0" r="3" fill="#070D12" stroke="#4E6B77" stroke-width="1.6"/>
+  <text x="1170" y="47.0" text-anchor="end" font-family="'JetBrains Mono','Fira Code','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="14" fill="#8BA6B2">$ sudo ./scripts/generate.sh</text>
+</svg>

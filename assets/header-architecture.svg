@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 84" width="1200" height="84" role="img" aria-label="Architecture">
+  <defs>
+    <style>
+      .run { animation: run 4s linear infinite; }
+      @keyframes run { from { stroke-dashoffset: 40 } to { stroke-dashoffset: -665 } }
+    @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+    </style>
+  </defs>
+  <rect x=".75" y=".75" width="1198.5" height="82.5" rx="14" fill="#070D12" stroke="#173440" stroke-width="1.5"/>
+  <rect x="0" y="18" width="4" height="48" rx="2" fill="#2BE4A7"/>
+  <g transform="translate(28 27.0)"><circle cx="5" cy="15" r="3.5" fill="none" stroke="#2BE4A7" stroke-width="2"/><circle cx="23" cy="5" r="3.5" fill="none" stroke="#2BE4A7" stroke-width="2"/><circle cx="23" cy="25" r="3.5" fill="none" stroke="#2BE4A7" stroke-width="2"/><path d="M8 13.5 L20 6.5 M8 16.5 L20 23.5 M23 9 V21" stroke="#2BE4A7" stroke-width="2"/></g>
+  <text x="74" y="49.0" font-family="'JetBrains Mono','Fira Code','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="20" fill="#FFB547">02</text>
+  <text x="128" y="51.0" font-family="'Segoe UI','Inter','Helvetica Neue',Helvetica,Arial,sans-serif" font-size="26" font-weight="700" fill="#E6F4F1">Architecture</text>
+  <line x1="336.4" y1="42.0" x2="1001.8" y2="42.0" stroke="#173440" stroke-width="1.6" stroke-dasharray="6 6"/><line x1="336.4" y1="42.0" x2="1001.8" y2="42.0" stroke="#2BE4A7" stroke-width="1.6" stroke-dasharray="40 665" class="run"/><circle cx="419.6" cy="42.0" r="3" fill="#070D12" stroke="#2BE4A7" stroke-width="1.6"/><circle cx="585.9" cy="42.0" r="3" fill="#070D12" stroke="#4E6B77" stroke-width="1.6"/><circle cx="752.3" cy="42.0" r="3" fill="#070D12" stroke="#2BE4A7" stroke-width="1.6"/><circle cx="918.6" cy="42.0" r="3" fill="#070D12" stroke="#4E6B77" stroke-width="1.6"/>
+  <text x="1170" y="47.0" text-anchor="end" font-family="'JetBrains Mono','Fira Code','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace" font-size="14" fill="#8BA6B2">XIT · OAM · N2/N3</text>
+</svg>
