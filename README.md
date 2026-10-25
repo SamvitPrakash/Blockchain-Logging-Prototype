@@ -415,8 +415,6 @@ python predict_topology.py --models results/models.csv --towers 50 --channels 10
 | `results/models.csv` | The 36 fitted models: coefficients, held-out RMSE (every fifth experiment held out) and the observed *T*/*L* range |
 | `results/{cpu,memory,network_rx,network_tx,disk_read,disk_write}.{png,pdf}` | Resource-usage figures by component role |
 
-`evaluation/README.md` covers the method's caveats in detail (asynchronous sampling, counter differencing and the lack of phase labels).
-
 <br/>
 
 <a id="findings"></a>
